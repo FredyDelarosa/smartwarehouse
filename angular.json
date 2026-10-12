@@ -38,7 +38,10 @@
                 "src/styles"
               ]
             },
-            "serviceWorker": false
+            "serviceWorker": false,
+            "allowedCommonJsDependencies": [
+              "jsqr"
+            ]
           },
           "configurations": {
             "production": {
