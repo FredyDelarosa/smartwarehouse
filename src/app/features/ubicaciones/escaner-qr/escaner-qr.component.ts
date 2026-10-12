@@ -56,6 +56,9 @@ export class EscanerQrComponent implements OnDestroy {
   private stream: MediaStream | null = null;
   /** Id del temporizador del bucle. Es un setTimeout, NO un requestAnimationFrame. */
   private timerId: ReturnType<typeof setTimeout> | null = null;
+
+  /** Tope de seguridad: `detect()` puede no resolver ni rechazar nunca. */
+  private topeDeteccion: ReturnType<typeof setTimeout> | null = null;
   private detector: BarcodeDetector | null = null;
   private decodificarJsQr: typeof import('jsqr').default | null = null;
   private lienzo: HTMLCanvasElement | null = null;
@@ -159,6 +162,7 @@ export class EscanerQrComponent implements OnDestroy {
       clearTimeout(this.timerId);
       this.timerId = null;
     }
+    this.limpiarTope();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.detector = null;
@@ -225,6 +229,13 @@ export class EscanerQrComponent implements OnDestroy {
     });
   }
 
+  private limpiarTope(): void {
+    if (this.topeDeteccion !== null) {
+      clearTimeout(this.topeDeteccion);
+      this.topeDeteccion = null;
+    }
+  }
+
   /**
    * Programa el siguiente intento.
    *
@@ -260,11 +271,13 @@ export class EscanerQrComponent implements OnDestroy {
       this.detector
         .detect(video)
         .then((codigos: DetectedBarcode[]) => {
+          this.limpiarTope();
           const codigo = codigos[0]?.rawValue;
           if (codigo) return this.procesar(codigo);
           this.programar();
         })
         .catch((err: unknown) => {
+          this.limpiarTope();
           // El nativo puede existir y fallar en cada llamada (permisos, GPU,
            // driver). Cuenta como error y degrada; si no, el diagnóstico
           // mentiría mostrando "buscando" para siempre.
@@ -272,6 +285,18 @@ export class EscanerQrComponent implements OnDestroy {
           this.degradarAJsQr();
           this.programar();
         });
+      // `detect()` puede quedarse COLGADO: devuelve una promesa que ni
+      // resuelve ni rechaza. Sin este tope el bucle se para en silencio y la
+      // pantalla se queda en "buscando" para siempre, sin avanzar ni fallar.
+      // Al agotarse, se degrada al decodificador por software, que siempre
+      // responde.
+      this.topeDeteccion = setTimeout(() => {
+        if (!this.activo() || this.detector === null) return;
+        this.topeDeteccion = null;
+        this.ultimoError = 'El lector nativo no respondió; se usa el de software.';
+        this.degradarAJsQr();
+        this.programar();
+      }, 1200);
       return;
     }
 
