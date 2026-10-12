@@ -79,6 +79,17 @@ cuando el servidor falla.
 
 ---
 
+## Producción
+
+**https://smartwarehouse.inode.cloud** — desplegado y verificado (2026-10-12).
+
+Para desplegar cambios, ver **[DEPLOY.md](./DEPLOY.md)**. Resumen:
+
+```bash
+ssh -i <clave> ubuntu@50.16.208.204
+sudo deploy-smartwarehouse      # backend + frontend
+```
+
 ## Comandos
 
 | Comando | Qué hace |
