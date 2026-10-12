@@ -29,6 +29,15 @@ export class ActualizacionService {
   private conectado = false;
 
   /**
+   * Evita avisos duplicados.
+   *
+   * `versionUpdates` y la comprobación explícita pueden disparar la misma
+   * detección por separado, y sin este guardia el usuario recibía tres
+   * toasts idénticos apilados ("Hay una versión nueva disponible" ×3).
+   */
+  private ofertaVisible = false;
+
+  /**
    * Se engancha a `versionUpdates` una sola vez al arrancar.
    *
    * En desarrollo `SwUpdate.isEnabled` es `false` porque no hay service worker
@@ -61,6 +70,8 @@ export class ActualizacionService {
   }
 
   private ofrecerActualizacion(): void {
+    if (this.ofertaVisible) return;
+    this.ofertaVisible = true;
     this.notify.info('Hay una versión nueva disponible.', {
       label: 'Actualizar',
       run: () => void this.actualizar(),
@@ -70,6 +81,9 @@ export class ActualizacionService {
   /** Activa la versión descargada y recarga. */
   private async actualizar(): Promise<void> {
     if (!this.swUpdate.isEnabled) return;
+    // La recarga invalida todo; se limpia para que, si la actualización se
+    // cancela, se pueda ofrecer de nuevo.
+    this.ofertaVisible = false;
     await this.swUpdate.activateUpdate();
     // `location` a propósito: el router no sabe recargar el documento, y con
     // `reload(1)` se perdería la pantalla de la que venía el usuario.
