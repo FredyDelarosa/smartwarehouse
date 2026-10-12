@@ -36,10 +36,11 @@
           </p>
         }
 
-        @if (!soportado) {
+        @if (!soportadoNativo) {
           <p class="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
             <sw-icon name="info" [size]="14" />
-            Tu navegador no soporta lectura de QR nativa: usa la entrada manual.
+            Este navegador no tiene lector de QR nativo: se usará el decodificador por software,
+            algo más lento pero igual de preciso.
           </p>
         }
 
@@ -48,12 +49,18 @@
           label="Activar cámara"
           icon="qr"
           (click)="iniciarCamara()"
-          [disabled]="!soportado"
         />
       </div>
     } @else {
       <div class="relative aspect-square w-full overflow-hidden bg-slate-950">
-        <video #video class="size-full object-cover" playsinline muted></video>
+        <video
+          #video
+          class="size-full object-cover"
+          playsinline
+          muted
+          autoplay
+          (loadedmetadata)="onVideoListo()"
+        ></video>
 
         <!-- Mira: encuadre cuadrado, el código va centrado -->
         <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -79,6 +86,41 @@
           </button>
         </div>
       </div>
+
+      <!--
+        Diagnóstico. Sin esto, "cámara negra" y "QR fuera de plano" se ven
+        igual: una pantalla negra y nada más. Estos números dicen cuál es cuál.
+      -->
+      @if (diagnostico(); as d) {
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border bg-surface-sunken px-5 py-3 text-xs sm:grid-cols-4">
+          <div>
+            <dt class="text-muted-foreground">Decodificador</dt>
+            <dd class="font-medium text-foreground">
+              {{ d.decodificador === 'nativo' ? 'Nativo (GPU)' : d.decodificador === 'jsQR' ? 'Software' : '—' }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">Resolución</dt>
+            <dd class="font-mono font-medium text-foreground">{{ d.resolucion }}</dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">Fotogramas</dt>
+            <dd class="font-mono font-medium text-foreground">{{ d.fotogramas }}</dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">Consejo</dt>
+            <dd class="text-muted-foreground">
+              @if (d.resolucion === '—') {
+                Sin señal de cámara
+              } @else if (d.fotogramas < 5) {
+                Buscando…
+              } @else {
+                Apunta al QR
+              }
+            </dd>
+          </div>
+        </dl>
+      }
     }
   </section>
 
