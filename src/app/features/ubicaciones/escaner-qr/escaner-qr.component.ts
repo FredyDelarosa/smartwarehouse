@@ -67,6 +67,7 @@ export class EscanerQrComponent implements OnDestroy {
   protected readonly soportadoNativo = 'BarcodeDetector' in globalThis;
 
   protected readonly activo = signal(false);
+  protected readonly iniciando = signal(false);
   protected readonly permisoDenegado = signal(false);
   protected readonly errorCamara = signal<string | null>(null);
   protected readonly codigoManual = signal('');
@@ -91,9 +92,11 @@ export class EscanerQrComponent implements OnDestroy {
     this.errorCamara.set(null);
     this.permisoDenegado.set(false);
     this.fotogramas.set(0);
+    this.iniciando.set(true);
 
     if (!navigator.mediaDevices?.getUserMedia) {
       this.errorCamara.set('Este navegador no permite usar la cámara. Escribe el código a mano.');
+      this.iniciando.set(false);
       return;
     }
 
@@ -107,14 +110,20 @@ export class EscanerQrComponent implements OnDestroy {
       })
       .then((stream) => {
         this.stream = stream;
+        // El `<video>` está siempre en el DOM (oculto con CSS), así que aquí sí
+        // existe. Antes vivía dentro de un `@else` y todavía no estaba creado:
+        // el stream llegaba sin destino y la pantalla se quedaba en negra.
         const video = this.videoRef()?.nativeElement;
-        if (!video) return;
-        video.srcObject = stream;
-        void video.play();
+        if (video) {
+          video.srcObject = stream;
+          void video.play();
+        }
         this.activo.set(true);
-        this.prepararDecodificacion().then(() => this.escanearEnBucle());
+        this.iniciando.set(false);
+        void this.prepararDecodificacion().then(() => this.escanearEnBucle());
       })
       .catch((err: unknown) => {
+        this.iniciando.set(false);
         const nombre = err instanceof DOMException ? err.name : '';
         if (nombre === 'NotAllowedError' || nombre === 'SecurityError') {
           this.permisoDenegado.set(true);

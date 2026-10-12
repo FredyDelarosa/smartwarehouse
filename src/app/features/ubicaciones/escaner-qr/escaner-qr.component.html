@@ -9,8 +9,56 @@
     </p>
   </header>
 
-  <!-- Cámara -->
+  <!--
+    Cámara.
+
+    ⚠️ El `<video>` vive SIEMPRE en el DOM, incluso con la cámara apagada.
+    Antes estaba dentro de un `@if (!activo()) … @else` y eso era un
+    deadlock: el elemento no existía hasta que `activo()` fuese `true`, pero
+    `getUserMedia` prometía el stream justo antes de ponerlo a `true`. Al
+    entonces `videoRef()` era `undefined`, el stream no tenía dónde
+    engancharse y la pantalla se quedaba en negro para siempre — con el
+    indicador del sistema diciendo que la cámara sí estaba en uso.
+
+    Ahora el elemento se oculta con CSS, no se desmonta: siempre existe y el
+    stream siempre tiene destino.
+  -->
   <section class="sw-card overflow-hidden">
+    <div class="relative aspect-square w-full overflow-hidden bg-slate-950" [class.hidden]="!activo()">
+      <video
+        #video
+        class="size-full object-cover"
+        playsinline
+        muted
+        autoplay
+        (loadedmetadata)="onVideoListo()"
+      ></video>
+
+      <!-- Mira: encuadre cuadrado, el código va centrado -->
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div class="relative aspect-square w-2/3 max-w-64">
+          <span class="absolute left-0 top-0 size-8 rounded-tl-lg border-l-4 border-t-4 border-white"></span>
+          <span class="absolute right-0 top-0 size-8 rounded-tr-lg border-r-4 border-t-4 border-white"></span>
+          <span class="absolute bottom-0 left-0 size-8 rounded-bl-lg border-b-4 border-l-4 border-white"></span>
+          <span class="absolute bottom-0 right-0 size-8 rounded-br-lg border-b-4 border-r-4 border-white"></span>
+        </div>
+      </div>
+
+      <div class="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-slate-950/90 to-transparent p-4">
+        <span class="flex items-center gap-1.5 text-xs text-white/80">
+          <span class="size-2 animate-pulse rounded-full bg-success"></span>
+          Apunta al QR del estante
+        </span>
+        <button
+          type="button"
+          (click)="detenerCamara()"
+          class="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-white/25"
+        >
+          Detener
+        </button>
+      </div>
+    </div>
+
     @if (!activo()) {
       <div class="flex flex-col items-center px-6 py-12 text-center">
         <span
@@ -48,79 +96,45 @@
           class="mt-5"
           label="Activar cámara"
           icon="qr"
+          [loading]="iniciando()"
           (click)="iniciarCamara()"
         />
       </div>
-    } @else {
-      <div class="relative aspect-square w-full overflow-hidden bg-slate-950">
-        <video
-          #video
-          class="size-full object-cover"
-          playsinline
-          muted
-          autoplay
-          (loadedmetadata)="onVideoListo()"
-        ></video>
+    }
 
-        <!-- Mira: encuadre cuadrado, el código va centrado -->
-        <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div class="relative aspect-square w-2/3 max-w-64">
-            <span class="absolute left-0 top-0 size-8 rounded-tl-lg border-l-4 border-t-4 border-white"></span>
-            <span class="absolute right-0 top-0 size-8 rounded-tr-lg border-r-4 border-t-4 border-white"></span>
-            <span class="absolute bottom-0 left-0 size-8 rounded-bl-lg border-b-4 border-l-4 border-white"></span>
-            <span class="absolute bottom-0 right-0 size-8 rounded-br-lg border-b-4 border-r-4 border-white"></span>
-          </div>
-        </div>
-
-        <div class="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-slate-950/90 to-transparent p-4">
-          <span class="flex items-center gap-1.5 text-xs text-white/80">
-            <span class="size-2 animate-pulse rounded-full bg-success"></span>
-            Apunta al QR del estante
-          </span>
-          <button
-            type="button"
-            (click)="detenerCamara()"
-            class="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-white/25"
-          >
-            Detener
-          </button>
-        </div>
-      </div>
-
-      <!--
+    <!--
         Diagnóstico. Sin esto, "cámara negra" y "QR fuera de plano" se ven
         igual: una pantalla negra y nada más. Estos números dicen cuál es cuál.
-      -->
-      @if (diagnostico(); as d) {
-        <dl class="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border bg-surface-sunken px-5 py-3 text-xs sm:grid-cols-4">
-          <div>
-            <dt class="text-muted-foreground">Decodificador</dt>
-            <dd class="font-medium text-foreground">
-              {{ d.decodificador === 'nativo' ? 'Nativo (GPU)' : d.decodificador === 'jsQR' ? 'Software' : '—' }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-muted-foreground">Resolución</dt>
-            <dd class="font-mono font-medium text-foreground">{{ d.resolucion }}</dd>
-          </div>
-          <div>
-            <dt class="text-muted-foreground">Fotogramas</dt>
-            <dd class="font-mono font-medium text-foreground">{{ d.fotogramas }}</dd>
-          </div>
-          <div>
-            <dt class="text-muted-foreground">Consejo</dt>
-            <dd class="text-muted-foreground">
-              @if (d.resolucion === '—') {
-                Sin señal de cámara
-              } @else if (d.fotogramas < 5) {
-                Buscando…
-              } @else {
-                Apunta al QR
-              }
-            </dd>
-          </div>
-        </dl>
-      }
+    -->
+    @if (activo() && diagnostico(); as d) {
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border bg-surface-sunken px-5 py-3 text-xs sm:grid-cols-4">
+        <div>
+          <dt class="text-muted-foreground">Decodificador</dt>
+          <dd class="font-medium text-foreground">
+            {{ d.decodificador === 'nativo' ? 'Nativo (GPU)' : d.decodificador === 'jsQR' ? 'Software' : '—' }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Resolución</dt>
+          <dd class="font-mono font-medium text-foreground">{{ d.resolucion }}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Fotogramas</dt>
+          <dd class="font-mono font-medium text-foreground">{{ d.fotogramas }}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Estado</dt>
+          <dd class="text-muted-foreground">
+            @if (d.resolucion === '—') {
+              Sin señal de cámara
+            } @else if (d.fotogramas < 5) {
+              Buscando…
+            } @else {
+              Apunta al QR
+            }
+          </dd>
+        </div>
+      </dl>
     }
   </section>
 
