@@ -1,0 +1,75 @@
+<div>
+  <label [for]="filtroId" class="mb-1.5 block text-sm font-medium text-foreground">
+    {{ label() }}
+    @if (obligatorio()) {
+      <span class="text-danger" aria-hidden="true">*</span>
+    }
+  </label>
+
+  <div class="relative">
+    <sw-icon
+      name="ubicacion"
+      [size]="16"
+      class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
+    />
+    <input
+      [id]="filtroId"
+      type="search"
+      autocomplete="off"
+      [value]="filtro()"
+      [placeholder]="placeholder()"
+      class="sw-input pl-9"
+      (input)="onFiltro($event)"
+    />
+  </div>
+
+  <label [for]="selectId" class="sr-only-focusable">{{ label() }} — lista filtrada</label>
+  <select
+    [id]="selectId"
+    class="sw-input mt-2"
+    [value]="value() === null ? '' : valorDe(value()!)"
+    [attr.aria-invalid]="error() ? 'true' : null"
+    (change)="onSelect($event)"
+  >
+    <option value="">— Selecciona una ubicación —</option>
+    @for (u of opciones(); track u.id) {
+      <option [value]="valorDe(u.id)">{{ etiqueta(u) }}</option>
+    }
+  </select>
+
+  @if (sinCoincidencias()) {
+    <p class="mt-1.5 text-xs text-muted-foreground">
+      Ninguna ubicación coincide con «{{ filtro() }}». Prueba con el código
+      (<span class="sw-code">P3-A-01</span>) o con el pasillo.
+    </p>
+  }
+
+  <!-- Ubicación elegida: los tres datos que lee el operario de un vistazo. -->
+  @if (seleccionada(); as u) {
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <sw-badge tone="accent" size="md">
+        <span class="sw-code">{{ u.codigo_ubicacion }}</span>
+      </sw-badge>
+      <span class="text-xs text-muted-foreground">
+        Pasillo <span class="font-medium text-foreground">{{ u.pasillo }}</span> ·
+        Estante <span class="font-medium text-foreground">{{ u.estante }}</span> ·
+        Nivel <span class="font-medium text-foreground">{{ u.nivel }}</span>
+      </span>
+      <button
+        type="button"
+        (click)="limpiar()"
+        class="ml-auto inline-flex items-center gap-1 rounded text-xs font-medium text-muted-foreground transition-colors hover:text-danger"
+      >
+        <sw-icon name="cerrar" [size]="12" />
+        Quitar
+      </button>
+    </div>
+  }
+
+  @if (error(); as mensaje) {
+    <p class="mt-1.5 flex items-center gap-1 text-xs text-danger" role="alert">
+      <sw-icon name="alerta" [size]="13" />
+      {{ mensaje }}
+    </p>
+  }
+</div>

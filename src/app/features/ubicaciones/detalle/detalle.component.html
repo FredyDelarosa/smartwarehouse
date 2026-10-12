@@ -1,0 +1,172 @@
+<div class="mx-auto max-w-3xl space-y-5 px-4 py-6 sm:px-6">
+  <a
+    routerLink="/ubicaciones"
+    class="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+  >
+    <sw-icon name="flecha-izquierda" [size]="16" />
+    Volver a ubicaciones
+  </a>
+
+  @if (cargando()) {
+    <div class="sw-card space-y-4 p-5">
+      <sw-skeleton [height]="'2rem'" [width]="'40%'" />
+      <sw-skeleton [height]="'5rem'" />
+      <sw-skeleton [height]="'10rem'" />
+    </div>
+  } @else if (error(); as mensaje) {
+    <div role="alert" class="rounded-lg border border-danger/40 bg-danger-surface p-4 text-sm text-danger">
+      {{ mensaje }}
+    </div>
+  } @else if (ubicacion(); as u) {
+    <!-- Cabecera: la referencia grande, como en el flujo de búsqueda -->
+    <header class="sw-card p-5">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="sw-eyebrow">Ubicación</p>
+          <h1 class="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+            <span class="sw-code">{{ u.codigo_ubicacion }}</span>
+          </h1>
+          <p class="mt-1 text-sm text-muted-foreground">
+            Pasillo {{ u.pasillo }} · Estante {{ u.estante }} · Nivel {{ u.nivel }}
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <sw-badge [tone]="u.activo ? 'success' : 'neutral'" [dot]="true">
+            {{ u.activo ? 'Activa' : 'Inactiva' }}
+          </sw-badge>
+          @if (puedeEditar()) {
+            <a
+              [routerLink]="['/ubicaciones', u.id, 'editar']"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-sunken"
+            >
+              <sw-icon name="editar" [size]="14" />
+              Editar
+            </a>
+          }
+        </div>
+      </div>
+
+      <dl class="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm sm:grid-cols-4">
+        <div>
+          <dt class="sw-eyebrow">Código QR</dt>
+          <dd class="sw-code mt-1 text-foreground">{{ u.codigo_qr }}</dd>
+        </div>
+        @if (u.coordenada_x; as x) {
+          <div>
+            <dt class="sw-eyebrow">Coordenada X</dt>
+            <dd class="sw-tabular mt-1 text-foreground">{{ x }}</dd>
+          </div>
+        }
+        @if (u.coordenada_y; as y) {
+          <div>
+            <dt class="sw-eyebrow">Coordenada Y</dt>
+            <dd class="sw-tabular mt-1 text-foreground">{{ y }}</dd>
+          </div>
+        }
+        <div>
+          <dt class="sw-eyebrow">Almacén</dt>
+          <dd class="sw-tabular mt-1 text-foreground">#{{ u.almacen_id }}</dd>
+        </div>
+      </dl>
+    </header>
+
+    <!-- Etiqueta de esta ubicación -->
+    <section class="sw-card p-5">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 class="flex items-center gap-2 text-base font-semibold text-foreground">
+            <sw-icon name="qr" [size]="18" class="text-accent" />
+            Etiqueta del estante
+          </h2>
+          <p class="mt-1 max-w-md text-sm text-muted-foreground">
+            Este es el código que se imprime y se pega en el estante. Al
+            escanearlo desde la app se abre directamente esta ubicación.
+          </p>
+
+          <div class="mt-3 flex flex-wrap gap-2">
+            <sw-btn
+              label="Descargar SVG"
+              icon="descargar"
+              variant="secondary"
+              size="sm"
+              (click)="descargarQr(u)"
+            />
+            <sw-btn
+              label="Descargar PNG"
+              icon="descargar"
+              variant="secondary"
+              size="sm"
+              (click)="descargarPng(u)"
+            />
+            <a
+              routerLink="/ubicaciones/etiquetas"
+              class="inline-flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-sunken"
+            >
+              <sw-icon name="descargar" [size]="14" />
+              Hoja de etiquetas
+            </a>
+          </div>
+        </div>
+
+        <sw-qr
+          [valor]="u.codigo_qr"
+          [codigoTexto]="u.codigo_ubicacion"
+          [descripcion]="'Pasillo ' + u.pasillo + ' · Estante ' + u.estante + ' · Nivel ' + u.nivel"
+          [tamano]="190"
+          class="shrink-0"
+        />
+      </div>
+    </section>
+
+    <!-- Contenido del estante -->
+    <section>
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <h2 class="text-sm font-semibold text-foreground">
+          Qué debería haber aquí
+        </h2>
+        @if (productos().length > 0) {
+          <span class="text-xs text-muted-foreground">
+            {{ totalPiezas() }} piezas en total
+          </span>
+        }
+      </div>
+
+      <div class="sw-card overflow-hidden">
+        @if (productos().length === 0) {
+          <sw-empty-state
+            icon="paquete"
+            title="Este estante está vacío"
+            description="No hay productos registrados en esta ubicación. Si debería haber algo, repórtalo como incidencia."
+          />
+        } @else {
+          <ul class="divide-y divide-border">
+            @for (p of productos(); track p.producto_id) {
+              <li class="flex items-center justify-between gap-3 px-4 py-3">
+                <div class="min-w-0">
+                  <a
+                    [routerLink]="['/productos', p.producto_id]"
+                    class="truncate text-sm font-medium text-foreground hover:text-accent hover:underline"
+                  >
+                    {{ p.nombre }}
+                  </a>
+                  <p class="sw-code mt-0.5 text-muted-foreground">{{ p.codigo }}</p>
+                </div>
+                <sw-badge tone="accent" size="md">
+                  {{ fmt.formatNumber(p.cantidad) }}
+                </sw-badge>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+
+    <p class="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+      <sw-icon name="info" [size]="14" class="mt-px shrink-0" />
+      Si algo de esta lista no está donde debería, repórtalo como
+      <span class="font-medium text-foreground">mal ubicado</span> para que se
+      pueda corregir la ubicación en el catálogo.
+    </p>
+  }
+</div>

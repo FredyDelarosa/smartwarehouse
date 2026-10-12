@@ -1,0 +1,54 @@
+<!--
+  Icono "maskable" (Android / Chrome).
+
+  A diferencia de `icon.svg`, este no lleva esquinas redondeadas: el sistema
+  recorta la imagen con la forma que quiera (círculo, squircles, …) y puede
+  llegar hasta el borde. Por eso:
+
+    - el fondo ocupa TODO el lienzo, sin margen;
+    - el contenido se encoge y se centra en la zona segura, que es el círculo
+      interior del 80 % (radio 205 px centrado en 256,256).
+
+  Si el contenido se saliera de ese círculo, Android lo recortaría.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="fondoM" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#002F6C" />
+      <stop offset="1" stop-color="#001F47" />
+    </linearGradient>
+    <linearGradient id="pinM" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#38bdf8" />
+      <stop offset="1" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo a sangre: sin esquinas, llega al borde del lienzo. -->
+  <rect width="512" height="512" fill="url(#fondoM)" />
+
+  <!--
+    Contenido reescalado al 62 % y centrado: así cabe dentro del círculo
+    seguro (205 px de radio) incluso en la parte más ancha (la estantería,
+    320 px de ancho originals).
+  -->
+  <g transform="translate(256 256) scale(0.62) translate(-256 -256)">
+    <g fill="#e2e8f0" opacity="0.9">
+      <rect x="96" y="300" width="320" height="26" rx="8" />
+      <rect x="96" y="388" width="320" height="26" rx="8" />
+      <rect x="96" y="212" width="320" height="26" rx="8" />
+    </g>
+    <g fill="#94a3b8">
+      <rect x="120" y="336" width="72" height="52" rx="7" />
+      <rect x="212" y="336" width="72" height="52" rx="7" />
+      <rect x="304" y="336" width="72" height="52" rx="7" />
+      <rect x="120" y="424" width="72" height="52" rx="7" />
+      <rect x="212" y="424" width="72" height="52" rx="7" />
+      <rect x="304" y="424" width="72" height="52" rx="7" />
+    </g>
+    <path
+      d="M256 56c-52 0-94 42-94 94 0 68 94 138 94 138s94-70 94-138c0-52-42-94-94-94z"
+      fill="url(#pinM)"
+    />
+    <circle cx="256" cy="150" r="36" fill="#0f172a" opacity="0.85" />
+  </g>
+</svg>

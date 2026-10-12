@@ -1,0 +1,164 @@
+<div class="flex min-h-dvh flex-col bg-background lg:grid lg:grid-cols-2">
+  <!-- Panel de marca: solo en escritorio, en móvil se oculta para no
+       robar altura a la tarea de inicio de sesión. -->
+  <section
+    class="relative hidden overflow-hidden bg-primary p-10 text-on-primary lg:flex lg:flex-col lg:justify-between"
+    aria-hidden="true"
+  >
+    <div class="flex items-center gap-2.5">
+      <span class="flex size-9 items-center justify-center rounded-lg bg-white/15">
+        <sw-icon name="paquete" [size]="20" [strokeWidth]="2" />
+      </span>
+      <span class="text-base font-semibold tracking-tight">SmartWarehouse</span>
+    </div>
+
+    <div class="max-w-sm">
+      <p class="text-3xl font-semibold leading-tight tracking-tight">
+        Encuentra el producto.
+        <span class="text-accent-on-primary">Sin recorrer el almacén.</span>
+      </p>
+      <p class="mt-4 text-sm leading-relaxed text-on-primary/75">
+        El trabajador busca por nombre o escanea el QR del estante, y la app le
+        dice exactamente en qué pasillo, estante y nivel está lo que necesita.
+      </p>
+    </div>
+
+    <p class="text-xs text-on-primary/60">Almacén Industrial XYZ · Proyecto de Ingeniería Industrial</p>
+  </section>
+
+  <!-- Formulario -->
+  <section class="flex flex-1 items-center justify-center px-4 py-10 sm:px-8">
+    <div class="w-full max-w-sm">
+      <div class="mb-8 lg:hidden">
+        <span
+          class="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary text-on-primary"
+        >
+          <sw-icon name="paquete" [size]="22" [strokeWidth]="2" />
+        </span>
+      </div>
+
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">Iniciar sesión</h1>
+      <p class="mt-1.5 text-sm text-muted-foreground">
+        Accede con las credenciales de tu cuenta del almacén.
+      </p>
+
+      <form (submit)="onSubmit($event)" novalidate class="mt-8 space-y-4">
+        <!-- Resumen de error del servidor: enlazado con aria-describedby -->
+        @if (errorServidor(); as mensaje) {
+          <div
+            role="alert"
+            class="flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+          >
+            <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+            <span>{{ mensaje }}</span>
+          </div>
+        }
+
+        <div>
+          <label for="email" class="mb-1.5 block text-sm font-medium text-foreground">
+            Correo electrónico
+          </label>
+          <input
+            id="email"
+            type="email"
+            autocomplete="username"
+            inputmode="email"
+            [formField]="emailField"
+            [attr.aria-invalid]="emailInvalido()"
+            [attr.aria-describedby]="errorEmail() ? 'email-error' : null"
+            placeholder="nombre@xyz.com"
+            class="sw-input"
+          />
+          @if (errorEmail(); as error) {
+            <p id="email-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+              <sw-icon name="alerta" [size]="13" />
+              {{ error }}
+            </p>
+          }
+        </div>
+
+        <div>
+          <label for="password" class="mb-1.5 block text-sm font-medium text-foreground">
+            Contraseña
+          </label>
+          <div class="relative">
+            <input
+              id="password"
+              type="password"
+              autocomplete="current-password"
+              [formField]="passwordField"
+              [attr.aria-invalid]="passwordInvalido()"
+              [attr.aria-describedby]="errorPassword() ? 'password-error' : null"
+              class="sw-input pr-10"
+            />
+            <sw-icon
+              name="contrasena"
+              [size]="16"
+              class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
+            />
+          </div>
+          @if (errorPassword(); as error) {
+            <p id="password-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+              <sw-icon name="alerta" [size]="13" />
+              {{ error }}
+            </p>
+          }
+        </div>
+
+        <sw-btn
+          type="submit"
+          label="Entrar"
+          [loading]="cargando()"
+          [disabled]="cargando()"
+          [fullWidth]="true"
+          size="lg"
+        />
+      </form>
+
+      <!-- Acceso rápido de demostración -->
+      <div class="mt-8 border-t border-border pt-5">
+        <button
+          type="button"
+          (click)="mostrarDemo.set(!mostrarDemo())"
+          class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          [attr.aria-expanded]="mostrarDemo()"
+        >
+          <sw-icon name="info" [size]="14" />
+          Cuentas de demostración
+          <sw-icon name="flecha-abajo" [size]="13" class="transition-transform" [class.rotate-180]="mostrarDemo()" />
+        </button>
+
+        @if (mostrarDemo()) {
+          <ul class="mt-3 space-y-1.5">
+            @for (demo of demos; track demo.email) {
+              <li>
+                <button
+                  type="button"
+                  (click)="usarDemo(demo.email, demo.password)"
+                  [disabled]="cargando()"
+                  class="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-border-strong hover:bg-surface-sunken disabled:opacity-50"
+                >
+                  <span class="min-w-0">
+                    <span class="block truncate text-xs font-medium text-foreground">
+                      {{ demo.email }}
+                    </span>
+                    <span class="block text-[11px] text-muted-foreground">{{ demo.rol }}</span>
+                  </span>
+                  <sw-icon
+                    name="flecha-derecha"
+                    [size]="14"
+                    class="shrink-0 text-subtle-foreground"
+                  />
+                </button>
+              </li>
+            }
+          </ul>
+          <p class="mt-2 text-[11px] leading-relaxed text-subtle-foreground">
+            Contraseña común: <code class="sw-code">Demo1234!</code> — sustituye el acceso real si
+            el backend está activo.
+          </p>
+        }
+      </div>
+    </div>
+  </section>
+</div>

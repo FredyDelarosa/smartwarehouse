@@ -1,0 +1,181 @@
+<div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="sw-eyebrow">Panel de control</p>
+      <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        Hola{{ nombre() ? ', ' + nombre() : '' }}
+      </h1>
+    </div>
+
+    <div class="flex gap-2">
+      <a
+        routerLink="/busquedas"
+        class="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover"
+      >
+        <sw-icon name="buscar" [size]="17" />
+        Buscar producto
+      </a>
+      <button
+        type="button"
+        (click)="recargar()"
+        [disabled]="datos.isLoading()"
+        class="inline-flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-sunken disabled:opacity-50"
+      >
+        <sw-icon
+          name="cargando"
+          [size]="16"
+          [class.animate-spin]="datos.isLoading()"
+        />
+        <span class="hidden sm:inline">Actualizar</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Indicadores -->
+  @if (datos.isLoading()) {
+    <sw-skeleton-cards [cantidad]="6" />
+  } @else if (datos.error(); as error) {
+    <div role="alert" class="sw-card border-danger/40 bg-danger-surface p-4">
+      <div class="flex items-start gap-3">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudieron cargar los indicadores</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="datos.reload()"
+          class="shrink-0 rounded-lg border border-danger/40 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+        >
+          Reintentar
+        </button>
+      </div>
+    </div>
+  } @else if (datos.value(); as d) {
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <sw-indicator-card
+        label="Productos"
+        [value]="fmt.formatNumber(d.total_productos)"
+        icon="paquete"
+      />
+      <sw-indicator-card
+        label="Ubicaciones"
+        [value]="fmt.formatNumber(d.total_ubicaciones)"
+        icon="ubicacion"
+      />
+      <sw-indicator-card
+        label="Stock bajo"
+        [value]="fmt.formatNumber(d.productos_stock_bajo)"
+        icon="alerta"
+        [tone]="d.productos_stock_bajo > 0 ? 'warning' : 'neutral'"
+        [action]="d.productos_stock_bajo > 0 ? 'Ver alertas' : null"
+        link="/inventario/alertas"
+      />
+      <sw-indicator-card
+        label="Incidencias abiertas"
+        [value]="fmt.formatNumber(d.total_incidencias_abiertas)"
+        icon="incidencia"
+        [tone]="d.total_incidencias_abiertas > 0 ? 'danger' : 'success'"
+        action="Ver"
+        link="/incidencias"
+      />
+      <sw-indicator-card
+        label="Tiempo medio"
+        [value]="fmt.formatDuration(d.tiempo_promedio_busqueda_segundos)"
+        icon="reloj"
+        tone="info"
+        [hint]="fmt.formatDecimal(d.tiempo_promedio_busqueda_minutos, 2) + ' min por búsqueda'"
+      />
+      <sw-indicator-card
+        label="Búsquedas"
+        [value]="fmt.formatNumber(d.total_busquedas)"
+        icon="buscar"
+      />
+    </div>
+  }
+
+  <!-- Alertas de stock -->
+  <section class="sw-card overflow-hidden">
+    <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div class="flex items-center gap-2">
+        <sw-icon name="alerta" [size]="17" class="text-warning" />
+        <h2 class="text-sm font-semibold text-foreground">Productos con stock bajo mínimo</h2>
+      </div>
+      @if (alertas.value()?.length; as total) {
+        <span class="rounded-full bg-warning-surface px-2 py-0.5 text-[11px] font-semibold text-warning">
+          {{ total }}
+        </span>
+      }
+    </header>
+
+    @if (alertas.isLoading()) {
+      <sw-skeleton-table [filas]="4" [columnas]="['2.5rem', '28%', '12%', '12%', '10%']" />
+    } @else if (alertas.value()?.length === 0) {
+      <sw-empty-state
+        icon="check"
+        title="Ningún producto bajo mínimo"
+        description="Todo el inventario está por encima de su stock mínimo configurado."
+      />
+    } @else if (alertas.value(); as lista) {
+      <!-- Tabla en escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Código</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Producto</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Stock</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Mínimo</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Falta</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of lista; track a.producto_id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/productos', a.producto_id]"
+                    class="sw-code text-accent hover:underline"
+                  >
+                    {{ a.codigo }}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5 font-medium text-foreground">{{ a.nombre }}</td>
+                <td class="sw-tabular px-4 py-2.5 text-right font-semibold text-danger">
+                  {{ fmt.formatNumber(a.stock_total) }}
+                </td>
+                <td class="sw-tabular px-4 py-2.5 text-right text-muted-foreground">
+                  {{ fmt.formatNumber(a.stock_minimo) }}
+                </td>
+                <td class="sw-tabular px-4 py-2.5 text-right font-medium text-warning">
+                  {{ fmt.formatNumber(a.faltante) }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tarjetas en móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (a of lista; track a.producto_id) {
+          <li class="flex items-center justify-between gap-3 px-4 py-3">
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium text-foreground">{{ a.nombre }}</p>
+              <p class="sw-code text-muted-foreground">{{ a.codigo }}</p>
+            </div>
+            <div class="shrink-0 text-right">
+              <p class="sw-tabular text-sm font-semibold text-danger">
+                {{ fmt.formatNumber(a.stock_total) }}
+              </p>
+              <p class="text-[11px] text-muted-foreground">
+                mín. {{ fmt.formatNumber(a.stock_minimo) }}
+              </p>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</div>

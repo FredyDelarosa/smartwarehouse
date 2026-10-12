@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/@angular/service-worker/config/schema.json",
+  "index": "/index.html",
+
+  "navigationRequestStrategy": "performance",
+
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "resources": {
+        "files": [
+          "/favicon.ico",
+          "/index.html",
+          "/manifest.webmanifest",
+          "/*.css",
+          "/*.js"
+        ]
+      }
+    },
+    {
+      "name": "icons",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": [
+          "/icons/*.png",
+          "/icons/*.svg"
+        ]
+      }
+    }
+  ],
+
+  "//": [
+    "NO hay `dataGroups` a propósito, y es la decisión más importante de este archivo.",
+    "",
+    "El plan de trabajo pide 'no cachear API por defecto', y tiene razón: los datos",
+    "del almacén (stock, ubicaciones, búsquedas) son estado en vivo. Cachear un",
+    "`stock_total` en el service worker haría que el trabajador viera existencias",
+    "que ya no hay: un producto puede haberse movido o vendido en otro terminal.",
+    "Un almacén con stock desactualizado no es un fallo pequeño, son errores de",
+    "recogida equivocada.",
+    "",
+    "Si alguna vez hiciera falta resilience offline real, lo correcto es un",
+    "`dataGroup` con URLs de solo lectura (`/productos/`, `/ubicaciones/`) y",
+    "`cacheConfig` con una caducidad corta, NUNCA aplicado a escrituras",
+    "(`/movimientos`, `/busquedas/*/finalizar`, `/incidencias/*/resolver`),",
+    "que además necesitan `method: 'POST'` y nunca deben servirse desde caché."
+  ]
+}

@@ -1,0 +1,163 @@
+<div class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Controles: no se imprimen -->
+  <div class="print:hidden">
+    <header class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <a
+          routerLink="/ubicaciones"
+          class="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <sw-icon name="flecha-izquierda" [size]="15" />
+          Volver a ubicaciones
+        </a>
+        <p class="sw-eyebrow">Impresión</p>
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          Etiquetas QR
+        </h1>
+        <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+          Genera los códigos de las ubicaciones para pegarlos en cada estante.
+          Marca las que quieras imprimir y usa el botón de abajo.
+        </p>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <sw-btn
+          label="Marcar todas"
+          variant="secondary"
+          size="sm"
+          (click)="alternarTodas()"
+        />
+        <sw-btn
+          [label]="seleccion().size ? 'Imprimir ' + seleccion().size + ' etiquetas' : 'Imprimir seleccionadas'"
+          icon="descargar"
+          size="sm"
+          [disabled]="seleccion().size === 0"
+          (click)="imprimir()"
+        />
+      </div>
+    </header>
+
+    @if (error(); as mensaje) {
+      <div role="alert" class="rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger">
+        {{ mensaje }}
+      </div>
+    }
+
+    @if (!todasSeleccionadas() && items().length > 0) {
+      <p class="text-xs text-muted-foreground">
+        <span class="sw-tabular font-semibold text-foreground">{{ seleccion().size }}</span>
+        de {{ items().length }} marcadas en esta página
+      </p>
+    }
+
+    @if (cargando()) {
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        @for (i of [1, 2, 3, 4, 5, 6, 7, 8]; track i) {
+          <div class="sw-card h-56 animate-pulse bg-surface-sunken"></div>
+        }
+      </div>
+    } @else if (items().length === 0) {
+      <div class="sw-card">
+        <sw-empty-state
+          icon="ubicacion"
+          title="No hay ubicaciones que etiquetar"
+          description="Crea las ubicaciones del almacén y vuelve aquí para imprimir sus códigos QR."
+        >
+          @if (puedeCrear()) {
+            <a
+              routerLink="/ubicaciones/nueva"
+              class="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover"
+            >
+              <sw-icon name="mas" [size]="16" />
+              Nueva ubicación
+            </a>
+          }
+        </sw-empty-state>
+      </div>
+    } @else {
+      <!-- Hoja imprimible -->
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        @for (u of items(); track u.id) {
+          <article
+            [class]="tarjetaClasses(u)"
+            [attr.aria-pressed]="seleccion().has(u.id)"
+          >
+            <!-- Cabecera de la etiqueta -->
+            <div class="flex items-start justify-between gap-2">
+              <button
+                type="button"
+                (click)="alternar(u)"
+                class="flex min-w-0 items-start gap-2 text-left print:pointer-events-none"
+                [attr.aria-label]="'Marcar ' + u.codigo_ubicacion"
+              >
+                <span
+                  [class]="seleccion().has(u.id) ? checkActivo : checkInactivo"
+                  aria-hidden="true"
+                >
+                  @if (seleccion().has(u.id)) {
+                    <sw-icon name="check" [size]="13" [strokeWidth]="3" />
+                  }
+                </span>
+                <span class="min-w-0">
+                  <span class="sw-code block truncate text-sm font-bold text-foreground">
+                    {{ u.codigo_ubicacion }}
+                  </span>
+                  <span class="block truncate text-[11px] text-muted-foreground">
+                    {{ pieDe(u) }}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                (click)="descargarUna(u)"
+                class="shrink-0 rounded p-1 text-subtle-foreground transition-colors hover:bg-surface-sunken hover:text-foreground print:hidden"
+                [attr.aria-label]="'Descargar QR de ' + u.codigo_ubicacion"
+              >
+                <sw-icon name="descargar" [size]="15" />
+              </button>
+            </div>
+
+            <sw-qr
+              [valor]="u.codigo_qr"
+              [tamano]="150"
+              [pie]="false"
+              class="mx-auto mt-2 print:mt-1"
+            />
+
+            <!-- Texto legible: imprescindible si el QR está sucio -->
+            <div class="mt-2 border-t border-border pt-1.5 text-center print:mt-1 print:pt-1">
+              <p class="sw-code text-[11px] font-semibold text-foreground">{{ u.codigo_qr }}</p>
+              <p class="text-[10px] text-muted-foreground">
+                Almacén {{ u.almacen_id }} · {{ pieDe(u) }}
+              </p>
+            </div>
+          </article>
+        }
+      </div>
+
+      <!-- Paginación: no se imprime -->
+      <nav class="flex items-center justify-center gap-2 print:hidden" aria-label="Paginación">
+        <button
+          type="button"
+          (click)="irA(pagina() - 1)"
+          [disabled]="pagina() === 0"
+          class="inline-flex items-center gap-1 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-sunken disabled:opacity-40"
+        >
+          <sw-icon name="flecha-izquierda" [size]="14" />
+          Anterior
+        </button>
+        <span class="sw-tabular px-2 text-xs text-muted-foreground">{{ pagina() + 1 }}</span>
+        <button
+          type="button"
+          (click)="irA(pagina() + 1)"
+          [disabled]="!tieneMas()"
+          class="inline-flex items-center gap-1 rounded-lg border border-border-strong px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-sunken disabled:opacity-40"
+        >
+          Siguiente
+          <sw-icon name="flecha-derecha" [size]="14" />
+        </button>
+      </nav>
+    }
+  </div>
+</div>

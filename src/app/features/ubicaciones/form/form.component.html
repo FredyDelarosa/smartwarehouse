@@ -1,0 +1,162 @@
+<div class="mx-auto max-w-xl px-4 py-6 sm:px-6">
+  <button
+    type="button"
+    (click)="cancelar()"
+    class="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+  >
+    <sw-icon name="flecha-izquierda" [size]="16" />
+    Volver
+  </button>
+
+  <h1 class="text-xl font-semibold tracking-tight text-foreground">
+    {{ esEdicion() ? 'Editar ubicación' : 'Nueva ubicación' }}
+  </h1>
+  <p class="mt-1 text-sm text-muted-foreground">
+    El código de ubicación se genera solo a partir del pasillo, el estante y el nivel.
+  </p>
+
+  <form (submit)="onSubmit($event)" novalidate class="mt-6 space-y-4">
+    @if (errorServidor(); as mensaje) {
+      <div
+        role="alert"
+        class="flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+      >
+        <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+        <span>{{ mensaje }}</span>
+      </div>
+    }
+
+    <!-- Pasillo / estante / nivel -->
+    <div class="grid grid-cols-3 gap-3">
+      <div>
+        <label for="pasillo" class="mb-1.5 block text-sm font-medium text-foreground">Pasillo</label>
+        <input
+          id="pasillo"
+          type="text"
+          [formField]="form.pasillo"
+          [attr.aria-invalid]="pasilloInvalido()"
+          [attr.aria-describedby]="errorPasillo() ? 'pasillo-error' : null"
+          placeholder="P3"
+          class="sw-input uppercase"
+        />
+        @if (errorPasillo(); as error) {
+          <p id="pasillo-error" class="mt-1.5 text-xs text-danger">{{ error }}</p>
+        }
+      </div>
+
+      <div>
+        <label for="estante" class="mb-1.5 block text-sm font-medium text-foreground">Estante</label>
+        <input
+          id="estante"
+          type="text"
+          [formField]="form.estante"
+          [attr.aria-invalid]="estanteInvalido()"
+          [attr.aria-describedby]="errorEstante() ? 'estante-error' : null"
+          placeholder="B"
+          class="sw-input uppercase"
+        />
+        @if (errorEstante(); as error) {
+          <p id="estante-error" class="mt-1.5 text-xs text-danger">{{ error }}</p>
+        }
+      </div>
+
+      <div>
+        <label for="nivel" class="mb-1.5 block text-sm font-medium text-foreground">Nivel</label>
+        <input
+          id="nivel"
+          type="text"
+          inputmode="numeric"
+          [formField]="form.nivel"
+          [attr.aria-invalid]="nivelInvalido()"
+          [attr.aria-describedby]="errorNivel() ? 'nivel-error' : null"
+          placeholder="02"
+          class="sw-input"
+        />
+        @if (errorNivel(); as error) {
+          <p id="nivel-error" class="mt-1.5 text-xs text-danger">{{ error }}</p>
+        }
+      </div>
+    </div>
+
+    <!-- Vista previa del código y de la etiqueta -->
+    <div class="grid gap-4 rounded-lg border border-dashed border-border-strong bg-surface-sunken p-4 sm:grid-cols-[1fr_auto]">
+      <div>
+        <p class="sw-eyebrow">Código resultante</p>
+        @if (codigoCalculado()) {
+          <p class="sw-code mt-1 text-base font-semibold text-foreground">
+            {{ codigoCalculado() }}
+          </p>
+          <p class="sw-code mt-0.5 text-muted-foreground">QR-{{ codigoCalculado() }}</p>
+          <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+            El código QR de esta ubicación es
+            <code class="sw-code">{{ qrDe() }}</code>. Podrás imprimirlo desde el
+            detalle de la ubicación o desde la hoja de etiquetas.
+          </p>
+        } @else {
+          <p class="mt-1 text-sm text-muted-foreground">
+            Completa pasillo, estante y nivel para generar el código y su QR.
+          </p>
+        }
+      </div>
+
+      @if (codigoCalculado()) {
+        <sw-qr
+          [valor]="qrDe()"
+          [tamano]="132"
+          [pie]="false"
+          [descripcion]="''"
+        />
+      }
+    </div>
+
+    <!-- QR manual (opcional) -->
+    <div>
+      <label for="qr" class="mb-1.5 block text-sm font-medium text-foreground">
+        Código QR <span class="font-normal text-muted-foreground">(opcional)</span>
+      </label>
+      <input
+        id="qr"
+        type="text"
+        [formField]="form.codigo_qr"
+        placeholder="Se genera como QR-&lt;código&gt;"
+        class="sw-input sw-code"
+      />
+      <p class="mt-1.5 text-xs text-muted-foreground">
+        Solo si el QR impreso en el estante no sigue la convención del almacén.
+      </p>
+    </div>
+
+    <!-- Coordenadas (opcional) -->
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="cx" class="mb-1.5 block text-sm font-medium text-foreground">
+          Coordenada X <span class="font-normal text-muted-foreground">(opcional)</span>
+        </label>
+        <input id="cx" type="text" [formField]="form.coordenada_x" class="sw-input" />
+      </div>
+      <div>
+        <label for="cy" class="mb-1.5 block text-sm font-medium text-foreground">
+          Coordenada Y <span class="font-normal text-muted-foreground">(opcional)</span>
+        </label>
+        <input id="cy" type="text" [formField]="form.coordenada_y" class="sw-input" />
+      </div>
+    </div>
+
+    <!-- Activa -->
+    <label class="flex items-center gap-2.5 rounded-lg border border-border p-3">
+      <input type="checkbox" [formField]="form.activo" class="size-4 accent-[var(--color-accent)]" />
+      <span class="text-sm text-foreground">Ubicación activa</span>
+    </label>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <sw-btn label="Cancelar" variant="ghost" (click)="cancelar()" />
+      <sw-btn
+        type="submit"
+        [label]="esEdicion() ? 'Guardar cambios' : 'Crear ubicación'"
+        icon="check"
+        [loading]="cargando()"
+        [disabled]="cargando()"
+      />
+    </div>
+  </form>
+</div>

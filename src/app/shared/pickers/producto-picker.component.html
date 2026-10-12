@@ -1,0 +1,92 @@
+<div>
+  <label [for]="inputId" class="mb-1.5 block text-sm font-medium text-foreground">
+    {{ label() }}
+    @if (obligatorio()) {
+      <span class="text-danger" aria-hidden="true">*</span>
+    }
+  </label>
+
+  <div class="relative">
+    <sw-icon
+      name="buscar"
+      [size]="16"
+      class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
+    />
+
+    <input
+      [id]="inputId"
+      type="text"
+      role="combobox"
+      autocomplete="off"
+      [value]="texto()"
+      [placeholder]="placeholder()"
+      [attr.autofocus]="autofocus() ? '' : null"
+      [attr.aria-expanded]="visible()"
+      [attr.aria-controls]="listboxId"
+      [attr.aria-activedescendant]="activo() >= 0 ? opcionId(activo()) : null"
+      [attr.aria-invalid]="error() ? 'true' : null"
+      aria-autocomplete="list"
+      aria-haspopup="listbox"
+      class="sw-input pl-9"
+      (input)="onInput($event)"
+      (keydown)="onKeydown($event)"
+      (focus)="abrir()"
+      (blur)="cerrar()"
+    />
+
+    @if (visible()) {
+      <ul
+        [id]="listboxId"
+        role="listbox"
+        [attr.aria-label]="'Sugerencias de producto'"
+        class="absolute inset-x-0 top-full z-20 mt-1.5 max-h-72 overflow-auto rounded-xl border border-border bg-surface py-1 shadow-raised"
+      >
+        @for (p of sugerencias(); track p.id; let i = $index) {
+          <li role="option" [attr.id]="opcionId(i)" [attr.aria-selected]="i === activo()">
+            <button
+              type="button"
+              [class.bg-surface-sunken]="i === activo()"
+              class="flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left transition-colors"
+              (mousedown)="$event.preventDefault(); elegir(p)"
+              (mouseenter)="activo.set(i)"
+            >
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-medium text-foreground">{{ p.nombre }}</span>
+                <span class="sw-code text-muted-foreground">{{ p.codigo }}</span>
+              </span>
+              @if (i === activo()) {
+                <sw-icon name="flecha-abajo" [size]="14" class="shrink-0 text-subtle-foreground" />
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+
+  <!-- Producto elegido: se confirma el código además del nombre. -->
+  @if (seleccionado(); as p) {
+    <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+      <sw-badge tone="accent" size="sm">
+        <span class="sw-code">{{ p.codigo }}</span>
+      </sw-badge>
+      <span>{{ p.nombre }}</span>
+      <span class="text-subtle-foreground">· unidad: {{ p.unidad_medida }}</span>
+      <button
+        type="button"
+        (click)="limpiar()"
+        class="ml-auto inline-flex items-center gap-1 rounded text-xs font-medium text-muted-foreground transition-colors hover:text-danger"
+      >
+        <sw-icon name="cerrar" [size]="12" />
+        Quitar
+      </button>
+    </p>
+  }
+
+  @if (error(); as mensaje) {
+    <p class="mt-1.5 flex items-center gap-1 text-xs text-danger" role="alert">
+      <sw-icon name="alerta" [size]="13" />
+      {{ mensaje }}
+    </p>
+  }
+</div>

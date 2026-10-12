@@ -1,0 +1,147 @@
+<div class="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6">
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="sw-eyebrow">Catálogo</p>
+      <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        Ubicaciones
+      </h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Cada estante del almacén con su código QR.
+      </p>
+    </div>
+
+    <div class="flex gap-2">
+      <a
+        routerLink="/escaner"
+        class="inline-flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-sunken"
+      >
+        <sw-icon name="qr" [size]="17" />
+        Escanear
+      </a>
+      <a
+        routerLink="/ubicaciones/etiquetas"
+        class="inline-flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-sunken"
+      >
+        <sw-icon name="descargar" [size]="17" />
+        Generar etiquetas
+      </a>
+      @if (puedeCrear()) {
+        <a
+          routerLink="/ubicaciones/nueva"
+          class="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover"
+        >
+          <sw-icon name="mas" [size]="17" />
+          Nueva ubicación
+        </a>
+      }
+    </div>
+  </header>
+
+  <!-- Filtro -->
+  <div class="relative">
+    <label for="filtro" class="sr-only-focusable">Filtrar ubicaciones</label>
+    <sw-icon
+      name="buscar"
+      [size]="16"
+      class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
+    />
+    <input
+      id="filtro"
+      type="search"
+      [value]="filtro()"
+      (input)="onFiltro($event)"
+      placeholder="Filtrar por código, pasillo o QR (P3-A-01)…"
+      class="sw-input pl-9"
+    />
+  </div>
+
+  @if (error(); as mensaje) {
+    <div role="alert" class="rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger">
+      {{ mensaje }}
+    </div>
+  }
+
+  <section class="sw-card overflow-hidden">
+    @if (cargando()) {
+      <sw-skeleton-table [filas]="8" [columnas]="['3rem', '22%', '18%', '18%', '14%']" />
+    } @else if (visibles().length === 0) {
+      <sw-empty-state
+        icon="ubicacion"
+        [title]="filtro() ? 'Ninguna ubicación coincide' : 'No hay ubicaciones registradas'"
+        [description]="
+          filtro()
+            ? 'Prueba con otro código: se escriben como P1-A-01.'
+            : 'Crea la primera ubicación para empezar a organizar el almacén.'
+        "
+      />
+    } @else {
+      <!-- Escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Código</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Pasillo</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Estante</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Nivel</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Código QR</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of visibles(); track u.id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/ubicaciones', u.id]"
+                    class="sw-code font-semibold text-accent hover:underline"
+                  >
+                    {{ u.codigo_ubicacion }}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5 font-medium text-foreground">{{ u.pasillo }}</td>
+                <td class="px-4 py-2.5 text-foreground">{{ u.estante }}</td>
+                <td class="px-4 py-2.5 text-foreground">{{ u.nivel }}</td>
+                <td class="px-4 py-2.5">
+                  <code class="sw-code text-muted-foreground">{{ u.codigo_qr }}</code>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <sw-badge [tone]="u.activo ? 'success' : 'neutral'" [dot]="true">
+                    {{ u.activo ? 'Activa' : 'Inactiva' }}
+                  </sw-badge>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (u of visibles(); track u.id) {
+          <li>
+            <a [routerLink]="['/ubicaciones', u.id]" class="flex items-center justify-between gap-3 px-4 py-3">
+              <div class="min-w-0">
+                <p class="sw-code font-semibold text-foreground">{{ u.codigo_ubicacion }}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                  {{ u.pasillo }} · {{ u.estante }} · {{ u.nivel }}
+                </p>
+              </div>
+              <sw-icon name="flecha-derecha" [size]="16" class="shrink-0 text-subtle-foreground" />
+            </a>
+          </li>
+        }
+      </ul>
+
+      <sw-pagination
+        [rango]="rango()"
+        [page]="pagina()"
+        [hasNext]="tieneMas()"
+        [hasPrev]="pagina() > 0"
+        [total]="visibles().length"
+        (prev)="irA(pagina() - 1)"
+        (next)="irA(pagina() + 1)"
+      />
+    }
+  </section>
+</div>

@@ -1,0 +1,361 @@
+<div class="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0">
+      <a
+        routerLink="/productos"
+        class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <sw-icon name="flecha-izquierda" [size]="14" />
+        Volver al catálogo
+      </a>
+
+      @if (producto.isLoading()) {
+        <div class="mt-3 h-7 w-64 animate-pulse rounded bg-surface-sunken"></div>
+      } @else if (producto.value(); as p) {
+        <p class="sw-eyebrow mt-2">{{ p.codigo }}</p>
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          {{ p.nombre }}
+        </h1>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <sw-badge [tone]="tonoEstado(p.activo)" [dot]="true">{{ p.activo ? 'Activo' : 'Inactivo' }}</sw-badge>
+          <sw-badge tone="neutral">{{ p.unidad_medida }}</sw-badge>
+          @if (stock.value(); as s) {
+            @if (s.requiere_alerta) {
+              <sw-badge tone="danger">Stock bajo mínimo</sw-badge>
+            } @else {
+              <sw-badge tone="success">Stock cubierto</sw-badge>
+            }
+          }
+        </div>
+      } @else {
+        <p class="sw-eyebrow mt-2">Producto</p>
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          Ficha de producto
+        </h1>
+      }
+    </div>
+
+    <div class="flex shrink-0 gap-2">
+      @if (producto.value(); as p) {
+        @if (puedeEditar()) {
+          <a [routerLink]="['/productos', p.id, 'editar']">
+            <sw-btn label="Editar" icon="editar" size="sm" />
+          </a>
+        }
+        @if (puedeEliminar() && p.activo) {
+          <sw-btn
+            label="Dar de baja"
+            icon="borrar"
+            variant="danger"
+            size="sm"
+            (click)="abrirBaja()"
+          />
+        }
+      }
+      <sw-btn
+        label="Actualizar"
+        icon="cargando"
+        variant="secondary"
+        [loading]="producto.isLoading()"
+        (click)="refrescar()"
+      />
+    </div>
+  </header>
+
+  <!-- Producto inexistente -->
+  @if (!producto.isLoading() && producto.error(); as error) {
+    <div role="alert" class="sw-card border-danger/40 bg-danger-surface p-4">
+      <div class="flex items-start gap-3">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudo cargar el producto</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="producto.reload()"
+          class="shrink-0 rounded-lg border border-danger/40 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+        >
+          Reintentar
+        </button>
+      </div>
+    </div>
+  } @else if (producto.isLoading()) {
+    <sw-skeleton-table [filas]="5" [columnas]="['25%', '35%', '25%']" label="Cargando producto" />
+  } @else if (producto.value(); as p) {
+    <!-- Datos + stock -->
+    <div class="grid gap-4 lg:grid-cols-3">
+      <section class="sw-card p-4 lg:col-span-2">
+        <h2 class="text-sm font-semibold text-foreground">Datos del producto</h2>
+
+        <dl class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <div>
+            <dt class="sw-eyebrow">Código</dt>
+            <dd class="sw-code mt-0.5 text-foreground">{{ p.codigo }}</dd>
+          </div>
+          <div>
+            <dt class="sw-eyebrow">Unidad de medida</dt>
+            <dd class="mt-0.5 text-sm text-foreground">{{ p.unidad_medida }}</dd>
+          </div>
+          <div>
+            <dt class="sw-eyebrow">Categoría</dt>
+            <dd class="mt-0.5 text-sm text-foreground">
+              @if (nombreCategoria(p.categoria_id); as nombre) {
+                {{ nombre }}
+              } @else {
+                <span class="text-muted-foreground">Sin categoría</span>
+              }
+            </dd>
+          </div>
+          <div>
+            <dt class="sw-eyebrow">Stock mínimo</dt>
+            <dd class="sw-tabular mt-0.5 text-sm text-foreground">
+              {{ fmt.formatNumber(p.stock_minimo) }} {{ p.unidad_medida }}
+            </dd>
+          </div>
+          <div class="sm:col-span-2">
+            <dt class="sw-eyebrow">Descripción</dt>
+            <dd class="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+              {{ p.descripcion || 'Sin descripción.' }}
+            </dd>
+          </div>
+          <div>
+            <dt class="sw-eyebrow">Creado</dt>
+            <dd class="mt-0.5 text-xs text-muted-foreground">
+              {{ fmt.formatDateTime(p.fecha_creacion) }}
+            </dd>
+          </div>
+          <div>
+            <dt class="sw-eyebrow">Última actualización</dt>
+            <dd class="mt-0.5 text-xs text-muted-foreground">
+              {{ fmt.formatDateTime(p.fecha_actualizacion) }}
+            </dd>
+          </div>
+        </dl>
+
+        <!--
+          La foto es opcional y el backend puede apuntar a un asset que no
+          existe (hoy `foto_url` viene como /assets/products/T001.jpg y no hay
+          nada sirviendo ahí). Sin un degradado, el usuario ve el icono de
+          imagen rota, que parece un fallo de la app.
+        -->
+        @if (p.foto_url && !fotoRota()) {
+          <img
+            [src]="p.foto_url"
+            [alt]="'Fotografía de ' + p.nombre"
+            loading="lazy"
+            (error)="fotoRota.set(true)"
+            class="mt-4 h-40 w-full max-w-xs rounded-lg border border-border object-cover"
+          />
+        } @else if (p.foto_url) {
+          <div
+            class="mt-4 flex h-24 w-full max-w-xs items-center gap-2 rounded-lg border border-dashed border-border-strong bg-surface-sunken px-4 text-xs text-muted-foreground"
+          >
+            <sw-icon name="paquete" [size]="16" class="shrink-0" />
+            <span>La fotografía indicada no está disponible.</span>
+          </div>
+        }
+      </section>
+
+      <section class="space-y-3">
+        <sw-indicator-card
+          label="Stock total"
+          [value]="fmt.formatNumber(stockTotal())"
+          [unit]="p.unidad_medida"
+          icon="inventario"
+          [tone]="stock.value()?.requiere_alerta ? 'danger' : 'success'"
+          hint="Suma de todas las ubicaciones"
+        />
+        <sw-indicator-card
+          label="Ubicaciones con stock"
+          [value]="stockUbicaciones() ?? '—'"
+          icon="ubicacion"
+          tone="neutral"
+          action="Ver detalle del stock"
+          [link]="linkStock()"
+        />
+      </section>
+    </div>
+
+    <!-- Distribución -->
+    <section class="sw-card overflow-hidden">
+      <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div class="flex items-center gap-2">
+          <sw-icon name="ubicacion" [size]="17" class="text-muted-foreground" />
+          <h2 class="text-sm font-semibold text-foreground">Distribución del stock</h2>
+        </div>
+        <a
+          [routerLink]="['/inventario', p.id]"
+          class="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+        >
+          Ver detalle
+          <sw-icon name="flecha-derecha" [size]="13" />
+        </a>
+      </header>
+
+      @if (stock.isLoading()) {
+        <sw-skeleton-table [filas]="3" [columnas]="['20%', '30%', '18%']" />
+      } @else if (stock.error()) {
+        <sw-empty-state
+          icon="alerta"
+          title="No se pudo consultar el stock"
+          description="Los datos del producto están bien, pero su inventario no se pudo leer."
+          [action]="true"
+        >
+          <sw-btn label="Reintentar" variant="secondary" (click)="stock.reload()" />
+        </sw-empty-state>
+      } @else if (stock.value(); as s) {
+        @if (s.distribucion.length === 0) {
+          <sw-empty-state
+            icon="vacio"
+            title="Sin existencias registradas"
+            description="Ninguna ubicación tiene stock de este producto todavía."
+          />
+        } @else {
+          <!-- Tabla en escritorio -->
+          <div class="hidden overflow-x-auto sm:block">
+            <table class="w-full text-sm">
+              <caption class="sr-only-focusable">
+                Stock del producto por ubicación
+              </caption>
+              <thead>
+                <tr class="border-b border-border text-left">
+                  <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Ubicación</th>
+                  <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Pasillo</th>
+                  <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Estante</th>
+                  <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Nivel</th>
+                  <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                    Cantidad
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (d of s.distribucion; track d.ubicacion_id) {
+                  <tr class="sw-table-row border-b border-border last:border-0">
+                    <td class="px-4 py-2.5">
+                      <sw-badge tone="accent" size="md">
+                        <span class="sw-code">{{ d.codigo_ubicacion }}</span>
+                      </sw-badge>
+                    </td>
+                    <td class="px-4 py-2.5 font-medium text-foreground">{{ d.pasillo }}</td>
+                    <td class="px-4 py-2.5 text-muted-foreground">{{ d.estante }}</td>
+                    <td class="px-4 py-2.5 text-muted-foreground">{{ d.nivel }}</td>
+                    <td class="sw-tabular px-4 py-2.5 text-right font-semibold text-foreground">
+                      {{ fmt.formatNumber(d.cantidad) }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Tarjetas en móvil -->
+          <ul class="divide-y divide-border sm:hidden">
+            @for (d of s.distribucion; track d.ubicacion_id) {
+              <li class="flex items-center justify-between gap-3 px-4 py-3">
+                <div class="min-w-0">
+                  <sw-badge tone="accent" size="md">
+                    <span class="sw-code">{{ d.codigo_ubicacion }}</span>
+                  </sw-badge>
+                  <p class="mt-1 text-xs text-muted-foreground">
+                    Pasillo {{ d.pasillo }} · Estante {{ d.estante }} · Nivel {{ d.nivel }}
+                  </p>
+                </div>
+                <span class="sw-tabular shrink-0 text-sm font-semibold text-foreground">
+                  {{ fmt.formatNumber(d.cantidad) }}
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </section>
+
+    <!-- Últimas incidencias -->
+    <section class="sw-card overflow-hidden">
+      <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div class="flex items-center gap-2">
+          <sw-icon name="incidencia" [size]="17" class="text-muted-foreground" />
+          <h2 class="text-sm font-semibold text-foreground">Últimas incidencias</h2>
+        </div>
+        <a
+          routerLink="/incidencias"
+          class="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+        >
+          Ver todas
+          <sw-icon name="flecha-derecha" [size]="13" />
+        </a>
+      </header>
+
+      @if (incidencias.isLoading()) {
+        <sw-skeleton-table [filas]="2" [columnas]="['30%', '50%']" />
+      } @else if (incidencias.error()) {
+        <p class="px-4 py-3 text-xs text-muted-foreground">
+          No se pudo consultar el historial de incidencias.
+        </p>
+      } @else if (incidencias.value(); as lista) {
+        @if (lista.length === 0) {
+          <p class="px-4 py-3 text-xs text-muted-foreground">
+            Este producto no tiene incidencias registradas.
+          </p>
+        } @else {
+          <ul class="divide-y divide-border">
+            @for (i of lista; track i.id) {
+              <li class="flex items-start justify-between gap-3 px-4 py-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-foreground">{{ etiquetaTipo(i.tipo) }}</p>
+                  @if (i.descripcion) {
+                    <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      {{ i.descripcion }}
+                    </p>
+                  }
+                  <p class="mt-1 text-[11px] text-subtle-foreground">
+                    {{ fmt.formatDateTime(i.fecha) }}
+                  </p>
+                </div>
+                <sw-badge [tone]="tonoIncidencia(i)" [dot]="true">
+                  {{ i.resuelta ? 'Resuelta' : 'Abierta' }}
+                </sw-badge>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </section>
+  }
+</div>
+
+<!-- Confirmación de baja -->
+@if (bajaAbierta() && producto.value(); as producto) {
+  <sw-modal
+    [abierto]="bajaAbierta()"
+    [title]="'Dar de baja ' + producto.codigo"
+    subtitle="El producto dejará de aparecer en el catálogo activo. El histórico de movimientos se conserva."
+    size="sm"
+    [footer]="true"
+    (cerrar)="cancelarBaja()"
+  >
+    <p class="text-sm text-muted-foreground">
+      ¿Seguro que quieres dar de baja
+      <span class="font-medium text-foreground">{{ producto.nombre }}</span>?
+    </p>
+
+    <div sw-modal-footer class="flex gap-2">
+      <sw-btn
+        label="Cancelar"
+        variant="secondary"
+        [disabled]="dandoDeBaja()"
+        (click)="cancelarBaja()"
+      />
+      <sw-btn
+        label="Dar de baja"
+        icon="borrar"
+        variant="danger"
+        [loading]="dandoDeBaja()"
+        [disabled]="dandoDeBaja()"
+        (click)="confirmarBaja()"
+      />
+    </div>
+  </sw-modal>
+}

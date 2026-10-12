@@ -1,0 +1,264 @@
+<div class="mx-auto max-w-2xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header>
+    <a
+      [routerLink]="esEdicion() ? ['/productos', idNumero()] : ['/productos']"
+      class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <sw-icon name="flecha-izquierda" [size]="14" />
+      Volver a productos
+    </a>
+
+    <p class="sw-eyebrow mt-2">{{ esEdicion() ? 'Edición' : 'Alta' }}</p>
+    <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+      {{ esEdicion() ? 'Editar producto' : 'Nuevo producto' }}
+    </h1>
+    <p class="mt-1 text-sm text-muted-foreground">
+      El código identifica el producto en toda la app: los movimientos lo referencian, por eso
+      no se puede cambiar una vez creado.
+    </p>
+  </header>
+
+  @if (esEdicion() && existente.isLoading()) {
+    <sw-skeleton-table [filas]="4" [columnas]="['35%', '50%']" label="Cargando producto" />
+  } @else if (esEdicion() && existente.error(); as error) {
+    <div role="alert" class="sw-card border-danger/40 bg-danger-surface p-4">
+      <div class="flex items-start gap-3">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudo cargar el producto a editar</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="existente.reload()"
+          class="shrink-0 rounded-lg border border-danger/40 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+        >
+          Reintentar
+        </button>
+      </div>
+    </div>
+  } @else {
+    <form (submit)="onSubmit($event)" novalidate class="sw-card space-y-4 p-4 sm:p-5">
+      <!-- Error del servidor: 409 por código duplicado, 422 de validación… -->
+      @if (errorServidor(); as mensaje) {
+        <div
+          role="alert"
+          class="flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+        >
+          <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+          <span>{{ mensaje }}</span>
+        </div>
+      }
+
+      <!-- Código -->
+      <div>
+        <label for="codigo" class="mb-1.5 block text-sm font-medium text-foreground">
+          Código <span class="text-danger" aria-hidden="true">*</span>
+        </label>
+        <input
+          id="codigo"
+          type="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          placeholder="T001"
+          class="sw-input sw-code"
+          [formField]="campos.codigo"
+          [attr.aria-invalid]="invalid(campos.codigo)"
+          [attr.aria-describedby]="errorDe(campos.codigo) ? 'codigo-error' : null"
+        />
+        @if (errorDe(campos.codigo); as error) {
+          <p id="codigo-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+            <sw-icon name="alerta" [size]="13" />
+            {{ error }}
+          </p>
+        } @else if (esEdicion()) {
+          <p class="mt-1.5 text-xs text-muted-foreground">
+            El código no se puede editar: es la clave con la que se registran los movimientos.
+          </p>
+        }
+      </div>
+
+      <!-- Nombre -->
+      <div>
+        <label for="nombre" class="mb-1.5 block text-sm font-medium text-foreground">
+          Nombre <span class="text-danger" aria-hidden="true">*</span>
+        </label>
+        <input
+          id="nombre"
+          type="text"
+          autocomplete="off"
+          placeholder="Tornillos 1/4&quot;, acero inoxidable"
+          class="sw-input"
+          [formField]="campos.nombre"
+          [attr.aria-invalid]="invalid(campos.nombre)"
+          [attr.aria-describedby]="errorDe(campos.nombre) ? 'nombre-error' : null"
+        />
+        @if (errorDe(campos.nombre); as error) {
+          <p id="nombre-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+            <sw-icon name="alerta" [size]="13" />
+            {{ error }}
+          </p>
+        }
+      </div>
+
+      <!-- Descripción -->
+      <div>
+        <label for="descripcion" class="mb-1.5 block text-sm font-medium text-foreground">
+          Descripción
+        </label>
+        <textarea
+          id="descripcion"
+          rows="3"
+          placeholder="Detalles que ayudan a reconocerlo en el estante…"
+          class="sw-input resize-y"
+          [formField]="campos.descripcion"
+        ></textarea>
+      </div>
+
+      <!-- Unidad + categoría -->
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label for="unidad_medida" class="mb-1.5 block text-sm font-medium text-foreground">
+            Unidad de medida <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <select
+            id="unidad_medida"
+            class="sw-input"
+            [formField]="campos.unidad_medida"
+            [attr.aria-invalid]="invalid(campos.unidad_medida)"
+            [attr.aria-describedby]="errorDe(campos.unidad_medida) ? 'unidad-error' : null"
+          >
+            @for (u of unidades; track u) {
+              <option [value]="u">{{ u }}</option>
+            }
+          </select>
+          @if (errorDe(campos.unidad_medida); as error) {
+            <p id="unidad-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+              <sw-icon name="alerta" [size]="13" />
+              {{ error }}
+            </p>
+          }
+        </div>
+
+        <!-- Categoría: se elige por NOMBRE, nunca por id.
+             El id es una clave interna; el usuario piensa en "Herramientas". -->
+        <div>
+          <label for="categoria_id" class="mb-1.5 block text-sm font-medium text-foreground">
+            Categoría
+          </label>
+          <select
+            id="categoria_id"
+            [formField]="campos.categoria_id"
+            [attr.aria-invalid]="invalid(campos.categoria_id)"
+            [attr.aria-describedby]="errorDe(campos.categoria_id) ? 'categoria-error' : 'categoria-ayuda'"
+            class="sw-input"
+          >
+            <option value="">— Sin categoría —</option>
+            @for (op of categorias.opcionesConFallback(categoriaActual()); track op.value) {
+              <option [value]="op.value">{{ op.label }}</option>
+            }
+          </select>
+
+          @if (errorDe(campos.categoria_id); as error) {
+            <p id="categoria-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+              <sw-icon name="alerta" [size]="13" />
+              {{ error }}
+            </p>
+          } @else {
+            <p id="categoria-ayuda" class="mt-1.5 text-xs text-muted-foreground">
+              @if (categorias.disponible() === false) {
+                El servidor aún no expone el catálogo de categorías: solo aparecen
+                los ids ya usados en otros productos.
+              }
+            </p>
+          }
+        </div>
+      </div>
+
+      <!-- Stock mínimo -->
+      <div>
+        <label for="stock_minimo" class="mb-1.5 block text-sm font-medium text-foreground">
+          Stock mínimo
+        </label>
+        <input
+          id="stock_minimo"
+          type="number"
+          inputmode="numeric"
+          step="1"
+          class="sw-input"
+          [formField]="campos.stock_minimo"
+          [attr.aria-invalid]="invalid(campos.stock_minimo)"
+          [attr.aria-describedby]="errorDe(campos.stock_minimo) ? 'stock-minimo-error' : 'stock-minimo-ayuda'"
+        />
+        <p id="stock-minimo-ayuda" class="mt-1.5 text-xs text-muted-foreground">
+          Por debajo de esta cantidad el producto aparece en las alertas de inventario.
+        </p>
+        @if (errorDe(campos.stock_minimo); as error) {
+          <p id="stock-minimo-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+            <sw-icon name="alerta" [size]="13" />
+            {{ error }}
+          </p>
+        }
+      </div>
+
+      <!-- Foto -->
+      <div>
+        <label for="foto_url" class="mb-1.5 block text-sm font-medium text-foreground">
+          URL de la foto
+        </label>
+        <input
+          id="foto_url"
+          type="url"
+          inputmode="url"
+          autocomplete="off"
+          placeholder="https://…"
+          class="sw-input"
+          [formField]="campos.foto_url"
+          [attr.aria-invalid]="invalid(campos.foto_url)"
+          [attr.aria-describedby]="errorDe(campos.foto_url) ? 'foto-error' : null"
+        />
+        @if (errorDe(campos.foto_url); as error) {
+          <p id="foto-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+            <sw-icon name="alerta" [size]="13" />
+            {{ error }}
+          </p>
+        }
+      </div>
+
+      <!-- Activo -->
+      <div class="flex items-start gap-2.5 rounded-lg border border-border bg-surface-sunken p-3">
+        <input
+          id="activo"
+          type="checkbox"
+          class="mt-0.5 size-4 shrink-0 accent-accent"
+          [formField]="form.activo"
+        />
+        <label for="activo" class="text-sm">
+          <span class="font-medium text-foreground">Producto activo</span>
+          <span class="block text-xs text-muted-foreground">
+            Si lo desactivas deja de aparecer en el catálogo, pero conserva su historial.
+          </span>
+        </label>
+      </div>
+
+      <!-- Acciones -->
+      <div class="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+        <a
+          [routerLink]="esEdicion() ? ['/productos', idNumero()] : ['/productos']"
+          class="inline-flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-sunken"
+        >
+          Cancelar
+        </a>
+        <sw-btn
+          type="submit"
+          [label]="esEdicion() ? 'Guardar cambios' : 'Crear producto'"
+          [icon]="esEdicion() ? 'check' : 'mas'"
+          [loading]="guardando()"
+          [disabled]="guardando()"
+        />
+      </div>
+    </form>
+  }
+</div>

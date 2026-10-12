@@ -1,0 +1,268 @@
+<div class="mx-auto max-w-3xl space-y-5 px-4 py-6 sm:px-6">
+  <header>
+    <p class="sw-eyebrow">Paso 1 de 2</p>
+    <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+      ¿Qué producto buscas?
+    </h1>
+    <p class="mt-1 text-sm text-muted-foreground">
+      Escribe el nombre o el código. La app te dirá en qué pasillo, estante y nivel está.
+    </p>
+  </header>
+
+  <!-- Buscador -->
+  <div class="relative">
+    <form (submit)="onSubmit($event)" role="search" class="relative">
+      <label for="termino" class="sr-only-focusable">Nombre o código del producto</label>
+      <sw-icon
+        name="buscar"
+        [size]="20"
+        class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-subtle-foreground"
+      />
+      <input
+        id="termino"
+        type="search"
+        name="termino"
+        autocomplete="off"
+        [value]="termino()"
+        (input)="onInput($event)"
+        (keydown)="onKeydown($event)"
+        placeholder="Tornillos 1/4&quot;, Guantes, T001…"
+        class="sw-input h-14 pl-12 pr-24 text-base"
+        [attr.aria-expanded]="sugerencias().length > 0"
+        aria-controls="sugerencias"
+        aria-autocomplete="list"
+      />
+      <button
+        type="submit"
+        [disabled]="termino().trim().length < 2 || buscando()"
+        class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover disabled:opacity-40"
+      >
+        {{ buscando() ? 'Buscando…' : 'Buscar' }}
+      </button>
+    </form>
+
+    <!-- Autocomplete -->
+    @if (sugerencias().length > 0) {
+      <ul
+        id="sugerencias"
+        role="listbox"
+        class="absolute inset-x-0 top-full z-20 mt-1.5 overflow-hidden rounded-xl border border-border bg-surface shadow-raised"
+      >
+        @for (p of sugerencias(); track p.id) {
+          <li role="option">
+            <button
+              type="button"
+              (click)="elegir(p)"
+              class="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-sunken"
+            >
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-medium text-foreground">{{ p.nombre }}</span>
+                <span class="sw-code text-muted-foreground">{{ p.codigo }}</span>
+              </span>
+              <sw-icon name="flecha-derecha" [size]="15" class="shrink-0 text-subtle-foreground" />
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+
+  <!-- Error -->
+  @if (error(); as mensaje) {
+    <div role="alert" class="flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger">
+      <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+      <span>{{ mensaje }}</span>
+    </div>
+  }
+
+  <!-- Estado inicial: instrucciones -->
+  @if (estadoInicial() && !buscando()) {
+    <div class="sw-card p-5">
+      <h2 class="text-sm font-semibold text-foreground">Cómo funciona</h2>
+      <ol class="mt-3 space-y-2.5 text-sm text-muted-foreground">
+        <li class="flex gap-3">
+          <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-[11px] font-semibold text-foreground">1</span>
+          Escribe el producto. Si hay coincidencias, elige una de la lista.
+        </li>
+        <li class="flex gap-3">
+          <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-[11px] font-semibold text-foreground">2</span>
+          La app muestra la ubicación exacta y cuánto hay de ese producto allí.
+        </li>
+        <li class="flex gap-3">
+          <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-[11px] font-semibold text-foreground">3</span>
+          Al llegar al estante, confirma dónde lo encontraste. Se registra el tiempo.
+        </li>
+      </ol>
+    </div>
+  }
+
+  <!-- Cargando -->
+  @if (buscando()) {
+    <sw-skeleton-table [filas]="3" [columnas]="['40%', '25%', '25%']" label="Buscando producto" />
+  }
+
+  <!-- Sin coincidencias -->
+  @if (sinCoincidencias()) {
+    <sw-empty-state
+      icon="buscar"
+      title="Ningún producto coincide con esa búsqueda"
+      description="Prueba con menos palabras, con el código exacto (por ejemplo T001) o revisa la ortografía."
+    >
+      <sw-btn label="Buscar otra cosa" variant="secondary" (click)="reiniciar()" />
+    </sw-empty-state>
+  }
+
+  <!-- Producto encontrado sin existencias -->
+  @if (sinStock()) {
+    <sw-empty-state
+      icon="paquete"
+      title="El producto existe pero no tiene stock registrado"
+      description="No hay ninguna ubicación con existencias. Es una incidencia de inventario: repórtala para que lo revisen."
+    >
+      <sw-btn label="Buscar otra cosa" variant="secondary" (click)="reiniciar()" />
+    </sw-empty-state>
+  }
+
+  <!-- Resultado con ubicaciones -->
+  @if (resultados()?.producto; as producto) {
+    <div class="space-y-4">
+      <!-- Resumen de la confirmación (aparece encima) -->
+      @if (resumen(); as r) {
+        <section
+          class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-success/40 bg-success-surface p-4"
+          aria-live="polite"
+        >
+          <div class="flex items-center gap-3">
+            <span class="flex size-9 items-center justify-center rounded-full bg-success/15 text-success">
+              <sw-icon name="check" [size]="19" [strokeWidth]="2.2" />
+            </span>
+            <div>
+              <p class="text-sm font-semibold text-success">Búsqueda registrada</p>
+              <p class="text-xs text-muted-foreground">
+                Tiempo empleado: {{ r.tiempo_busqueda_segundos }} segundos
+              </p>
+            </div>
+          </div>
+          <sw-btn
+            label="Ver historial"
+            variant="secondary"
+            size="sm"
+            (click)="irAlHistorial()"
+          />
+        </section>
+      }
+      <!-- Aviso cuando el backend no pudo registrar la confirmación.
+           El trabajador ya tiene la ubicación: puede seguir trabajando. -->
+      @if (registroFallido()) {
+        <div
+          role="status"
+          class="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm text-warning"
+        >
+          <sw-icon name="info" [size]="17" class="mt-px shrink-0" />
+          <span>
+            La ubicación se encontró, pero el servidor no pudo registrar el
+            tiempo de búsqueda. Avisa a un supervisor para que lo revise.
+          </span>
+        </div>
+      }
+
+      <!-- Cabecera del producto -->
+      <section class="sw-card flex flex-wrap items-start justify-between gap-4 p-4">
+        <div class="flex min-w-0 gap-3">
+          <span
+            class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-muted-foreground"
+            aria-hidden="true"
+          >
+            <sw-icon name="paquete" [size]="22" />
+          </span>
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold text-foreground">{{ producto.nombre }}</h2>
+            <p class="sw-code mt-0.5 text-muted-foreground">{{ producto.codigo }}</p>
+            @if (producto.descripcion) {
+              <p class="mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground">
+                {{ producto.descripcion }}
+              </p>
+            }
+          </div>
+        </div>
+
+        <div class="shrink-0 text-right">
+          <p class="sw-eyebrow">Existencias totales</p>
+          <p class="sw-tabular mt-0.5 text-2xl font-semibold leading-none text-foreground">
+            {{ resultados()!.stockTotal }}
+          </p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ producto.unidad_medida }}</p>
+        </div>
+      </section>
+
+      <!-- Ubicaciones -->
+      <section>
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-foreground">
+            ¿Dónde está? ({{ ordenadas().length }}
+            {{ ordenadas().length === 1 ? 'ubicación' : 'ubicaciones' }})
+          </h3>
+          <sw-badge tone="info" size="sm">
+            Ordenado por cantidad
+          </sw-badge>
+        </div>
+
+        <ul class="space-y-3">
+          @for (u of ordenadas(); track u.ubicacion_id) {
+            <li class="sw-card overflow-hidden">
+              <!--
+                En móvil los tres datos (pasillo/estante/nivel) van en tamaño
+                XXL: es la información que el worker lee de lejos, con guantes.
+              -->
+              <div class="grid grid-cols-3 divide-x divide-border border-b border-border">
+                <div class="p-3 text-center sm:p-4">
+                  <p class="sw-eyebrow">Pasillo</p>
+                  <p class="mt-1 text-2xl font-semibold leading-none tracking-tight text-foreground sm:text-3xl">
+                    {{ u.pasillo }}
+                  </p>
+                </div>
+                <div class="p-3 text-center sm:p-4">
+                  <p class="sw-eyebrow">Estante</p>
+                  <p class="mt-1 text-2xl font-semibold leading-none tracking-tight text-foreground sm:text-3xl">
+                    {{ u.estante }}
+                  </p>
+                </div>
+                <div class="p-3 text-center sm:p-4">
+                  <p class="sw-eyebrow">Nivel</p>
+                  <p class="mt-1 text-2xl font-semibold leading-none tracking-tight text-foreground sm:text-3xl">
+                    {{ u.nivel }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <sw-badge tone="accent" size="md">
+                    <span class="sw-code">{{ u.codigo_ubicacion }}</span>
+                  </sw-badge>
+                  <span class="sw-tabular text-sm text-muted-foreground">
+                    {{ u.cantidad }} {{ producto.unidad_medida }} aquí
+                  </span>
+                </div>
+
+                <sw-btn
+                  label="Confirmar encontrado aquí"
+                  icon="check"
+                  variant="success"
+                  size="sm"
+                  [loading]="confirmando() === u.ubicacion_id"
+                  [disabled]="confirmando() !== null && confirmando() !== u.ubicacion_id"
+                  (click)="confirmar(u, producto)"
+                />
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <div class="flex justify-center pt-2">
+        <sw-btn label="Buscar otro producto" variant="ghost" icon="flecha-izquierda" (click)="reiniciar()" />
+      </div>
+    </div>
+  }
+</div>

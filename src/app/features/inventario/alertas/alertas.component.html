@@ -1,0 +1,256 @@
+<div class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="sw-eyebrow">Inventario</p>
+      <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        Stock bajo mínimo
+      </h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Productos que hoy no cubren su stock mínimo. Ordenados por lo que más falta.
+      </p>
+    </div>
+
+    <div class="flex gap-2">
+      <a routerLink="/productos">
+        <sw-btn label="Ver catálogo" icon="paquete" variant="secondary" size="sm" />
+      </a>
+      <sw-btn
+        label="Actualizar"
+        icon="cargando"
+        variant="secondary"
+        size="sm"
+        [loading]="alertas.isLoading()"
+        (click)="refrescar()"
+      />
+    </div>
+  </header>
+
+  <!-- Resumen -->
+  @if (alertas.isLoading()) {
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      @for (i of skeleton; track i) {
+        <div class="sw-card h-24 animate-pulse bg-surface-sunken"></div>
+      }
+    </div>
+  } @else if (alertas.error(); as error) {
+    <div role="alert" class="sw-card border-danger/40 bg-danger-surface p-4">
+      <div class="flex items-start gap-3">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudieron cargar las alertas</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="refrescar()"
+          class="shrink-0 rounded-lg border border-danger/40 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+        >
+          Reintentar
+        </button>
+      </div>
+    </div>
+  } @else if (resumen(); as r) {
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <sw-indicator-card
+        label="Productos bajo mínimo"
+        [value]="fmt.formatNumber(r.productos)"
+        icon="alerta"
+        [tone]="r.productos > 0 ? 'warning' : 'success'"
+        [hint]="r.agotados > 0 ? r.agotados + ' totalmente agotados' : 'Ninguno agotado'"
+      />
+      <sw-indicator-card
+        label="Faltante total"
+        [value]="fmt.formatNumber(r.faltanteTotal)"
+        icon="inventario"
+        tone="danger"
+        hint="Unidades por reponer"
+      />
+      <sw-indicator-card
+        label="Cobertura media"
+        [value]="fmt.formatPercent(r.cobertura, 0)"
+        icon="grafico"
+        [tone]="r.cobertura < 50 ? 'danger' : 'warning'"
+        hint="Sobre el stock mínimo acumulado"
+      />
+      <sw-indicator-card
+        label="Más crítico"
+        [value]="r.critico?.codigo ?? '—'"
+        icon="incidencia"
+        tone="danger"
+        [hint]="
+          r.critico
+            ? r.critico.nombre + ' · faltan ' + fmt.formatNumber(r.critico.faltante)
+            : 'Sin productos bajo mínimo'
+        "
+        [action]="r.critico ? 'Ver detalle' : null"
+        [link]="linkCritico()"
+      />
+    </div>
+  }
+
+  <!-- Listado -->
+  <section class="sw-card overflow-hidden">
+    <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div class="flex items-center gap-2">
+        <sw-icon name="inventario" [size]="17" class="text-muted-foreground" />
+        <h2 class="text-sm font-semibold text-foreground">Necesitan reposición</h2>
+      </div>
+      @if (lista().length > 0) {
+        <sw-badge tone="warning" size="md">{{ lista().length }}</sw-badge>
+      }
+    </header>
+
+    @if (alertas.isLoading()) {
+      <sw-skeleton-table [filas]="5" [columnas]="['3rem', '26%', '18%', '12%', '10%']" />
+    } @else if (alertas.error()) {
+      <sw-empty-state
+        icon="alerta"
+        title="No se pudo consultar el inventario"
+        description="Revisa tu conexión y vuelve a intentarlo."
+        [action]="true"
+      >
+        <sw-btn label="Reintentar" variant="secondary" (click)="refrescar()" />
+      </sw-empty-state>
+    } @else if (lista().length === 0) {
+      <sw-empty-state
+        icon="check"
+        title="Ningún producto bajo mínimo"
+        description="Todo el inventario está por encima de su stock mínimo configurado."
+        [action]="true"
+      >
+        <a routerLink="/productos">
+          <sw-btn label="Revisar el catálogo" icon="paquete" variant="secondary" />
+        </a>
+      </sw-empty-state>
+    } @else {
+      <!-- Tabla en escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <caption class="sr-only-focusable">
+            Productos con stock por debajo del mínimo, ordenados por faltante
+          </caption>
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Código</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Producto</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">
+                Cobertura del mínimo
+              </th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Stock
+              </th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Faltante
+              </th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Estado
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of lista(); track a.producto_id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/productos', a.producto_id]"
+                    class="sw-code text-accent hover:underline"
+                  >
+                    {{ a.codigo }}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/productos', a.producto_id]"
+                    class="font-medium text-foreground hover:text-accent hover:underline"
+                  >
+                    {{ a.nombre }}
+                  </a>
+                  <span class="block text-[11px] text-muted-foreground">{{ a.unidad_medida }}</span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <!-- Barra de cobertura: la parte llena es lo que hay hoy. -->
+                  <div
+                    class="h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken"
+                    role="img"
+                    [attr.aria-label]="
+                      'Cobertura del mínimo: ' + fmt.formatPercent(cobertura(a), 0)
+                    "
+                  >
+                    <div
+                      class="h-full rounded-full transition-[width]"
+                      [class]="tonoBarra(a)"
+                      [style.width.%]="cobertura(a)"
+                    ></div>
+                  </div>
+                  <p class="sw-tabular mt-1 text-[11px] text-muted-foreground">
+                    {{ fmt.formatPercent(cobertura(a), 0) }} de
+                    {{ fmt.formatNumber(a.stock_minimo) }} {{ a.unidad_medida }}
+                  </p>
+                </td>
+                <td class="sw-tabular px-4 py-2.5 text-right font-semibold text-danger">
+                  {{ fmt.formatNumber(a.stock_total) }}
+                </td>
+                <td class="sw-tabular px-4 py-2.5 text-right font-medium text-warning">
+                  {{ fmt.formatNumber(a.faltante) }}
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <sw-badge [tone]="criticidad(a).tone" [dot]="true">{{ criticidad(a).etiqueta }}</sw-badge>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tarjetas en móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (a of lista(); track a.producto_id) {
+          <li class="space-y-2 px-4 py-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <a
+                  [routerLink]="['/productos', a.producto_id]"
+                  class="block truncate text-sm font-medium text-foreground"
+                >
+                  {{ a.nombre }}
+                </a>
+                <p class="sw-code text-muted-foreground">{{ a.codigo }}</p>
+              </div>
+              <sw-badge [tone]="criticidad(a).tone" [dot]="true">{{ criticidad(a).etiqueta }}</sw-badge>
+            </div>
+
+            <div
+              class="h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken"
+              role="img"
+              [attr.aria-label]="'Cobertura del mínimo: ' + fmt.formatPercent(cobertura(a), 0)"
+            >
+              <div
+                class="h-full rounded-full transition-[width]"
+                [class]="tonoBarra(a)"
+                [style.width.%]="cobertura(a)"
+              ></div>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+              <p class="sw-tabular text-xs text-muted-foreground">
+                <span class="font-semibold text-danger">
+                  {{ fmt.formatNumber(a.stock_total) }}
+                </span>
+                de {{ fmt.formatNumber(a.stock_minimo) }} {{ a.unidad_medida }} ·
+                <span class="text-warning">faltan {{ fmt.formatNumber(a.faltante) }}</span>
+              </p>
+              <a
+                [routerLink]="['/inventario', a.producto_id]"
+                class="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-accent hover:underline"
+              >
+                Stock
+                <sw-icon name="flecha-derecha" [size]="13" />
+              </a>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</div>

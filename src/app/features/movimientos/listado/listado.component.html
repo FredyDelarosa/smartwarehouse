@@ -1,0 +1,257 @@
+<div class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="sw-eyebrow">Inventario</p>
+      <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        Movimientos
+      </h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Entradas, salidas y traslados registrados en el almacén.
+      </p>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      @if (store.can('movimientos:registrar')) {
+        <a routerLink="/movimientos/entrada">
+          <sw-btn label="Entrada" icon="flecha-abajo" variant="success" size="sm" />
+        </a>
+        <a routerLink="/movimientos/salida">
+          <sw-btn label="Salida" icon="flecha-derecha" size="sm" />
+        </a>
+        <a routerLink="/movimientos/traslado">
+          <sw-btn label="Traslado" icon="movimiento" variant="secondary" size="sm" />
+        </a>
+      }
+      <sw-btn
+        label="Actualizar"
+        icon="cargando"
+        variant="secondary"
+        size="sm"
+        [loading]="datos.isLoading()"
+        (click)="datos.reload()"
+      />
+    </div>
+  </header>
+
+  <!-- Filtros -->
+  <section class="sw-card p-4" aria-label="Filtros del listado">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div>
+        <label for="filtro-tipo" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Tipo
+        </label>
+        <select
+          id="filtro-tipo"
+          class="sw-input"
+          [value]="tipo()"
+          (change)="onTipo($event)"
+        >
+          <option value="">Todos los tipos</option>
+          @for (t of tipos; track t) {
+            <option [value]="t">{{ ETIQUETA_TIPO[t] }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="sm:col-span-2">
+        <sw-producto-picker
+          label="Producto"
+          [obligatorio]="false"
+          placeholder="Filtra por nombre o código"
+          [value]="productoId()"
+          (valueChange)="onProducto($event)"
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label for="filtro-desde" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Desde
+          </label>
+          <input
+            id="filtro-desde"
+            type="date"
+            class="sw-input"
+            [value]="desde()"
+            (change)="onDesde($event)"
+          />
+        </div>
+        <div>
+          <label for="filtro-hasta" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Hasta
+          </label>
+          <input
+            id="filtro-hasta"
+            type="date"
+            class="sw-input"
+            [value]="hasta()"
+            (change)="onHasta($event)"
+          />
+        </div>
+      </div>
+    </div>
+
+    @if (hayFiltros()) {
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <p class="text-xs text-muted-foreground">
+          @if (desde() || hasta()) {
+            El rango de fechas se aplica sobre los movimientos de la página cargada.
+          } @else {
+            Filtros activos sobre {{ rango() }}.
+          }
+        </p>
+        <sw-btn label="Limpiar filtros" variant="ghost" size="sm" (click)="limpiarFiltros()" />
+      </div>
+    }
+  </section>
+
+  <!-- Listado -->
+  <section class="sw-card overflow-hidden">
+    @if (datos.isLoading()) {
+      <sw-skeleton-table [filas]="8" [columnas]="['12%', '10%', '24%', '10%', '12%', '14%']" />
+    } @else if (datos.error(); as error) {
+      <div role="alert" class="flex items-start gap-3 p-4">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudieron cargar los movimientos</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <sw-btn label="Reintentar" variant="secondary" size="sm" (click)="datos.reload()" />
+      </div>
+    } @else if (filas().length === 0) {
+      <sw-empty-state
+        [icon]="hayFiltros() ? 'filtro' : 'movimiento'"
+        [title]="hayFiltros() ? 'Ningún movimiento coincide con los filtros' : 'Todavía no hay movimientos'"
+        [description]="
+          hayFiltros()
+            ? 'Prueba con otro tipo de movimiento, otro producto o amplía el rango de fechas.'
+            : 'Cuando registres la primera entrada de producto aparecerá aquí, con su fecha, su ubicación y quién lo hizo.'
+        "
+      >
+        @if (hayFiltros()) {
+          <sw-btn label="Limpiar filtros" variant="secondary" (click)="limpiarFiltros()" />
+        } @else if (store.can('movimientos:registrar')) {
+          <a routerLink="/movimientos/entrada">
+            <sw-btn label="Registrar la primera entrada" icon="mas" />
+          </a>
+        }
+      </sw-empty-state>
+    } @else {
+      <!-- Tabla en escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <caption class="sr-only-focusable">
+            Movimientos de inventario con tipo, producto, cantidad, origen, destino, responsable y fecha
+          </caption>
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Tipo</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Producto</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Cantidad
+              </th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Origen</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Destino</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Usuario</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Fecha
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of filas(); track m.id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5">
+                  <sw-badge [tone]="TONE_TIPO[m.tipo]">{{ ETIQUETA_TIPO[m.tipo] }}</sw-badge>
+                </td>
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/productos', m.producto_id]"
+                    class="font-medium text-foreground hover:text-accent hover:underline"
+                  >
+                    {{ producto(m) }}
+                  </a>
+                  @if (m.referencia) {
+                    <span class="sw-code ml-2 text-muted-foreground">{{ m.referencia }}</span>
+                  }
+                </td>
+                <td class="sw-tabular px-4 py-2.5 text-right font-semibold text-foreground">
+                  {{ cantidad(m) }}
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="sw-code text-muted-foreground">{{ origen(m) }}</span>
+                </td>
+                <td class="px-4 py-2.5">
+                  <span class="sw-code text-muted-foreground">{{ destino(m) }}</span>
+                </td>
+                <td class="px-4 py-2.5 text-muted-foreground">{{ autor(m) }}</td>
+                <td
+                  class="px-4 py-2.5 text-right text-xs text-muted-foreground"
+                  [attr.title]="fmt.formatDateTime(m.fecha)"
+                >
+                  {{ fmt.formatRelative(m.fecha) }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tarjetas en móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (m of filas(); track m.id) {
+          <li class="px-4 py-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-foreground">{{ producto(m) }}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                  {{ autor(m) }} · {{ fmt.formatRelative(m.fecha) }}
+                </p>
+              </div>
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                <sw-badge [tone]="TONE_TIPO[m.tipo]">{{ ETIQUETA_TIPO[m.tipo] }}</sw-badge>
+                <span class="sw-tabular text-sm font-semibold text-foreground">
+                  {{ cantidad(m) }}
+                </span>
+              </div>
+            </div>
+
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              @if (m.ubicacion_origen_id !== null) {
+                <span class="inline-flex items-center gap-1">
+                  <sw-icon name="ubicacion" [size]="13" />
+                  <span class="sw-code">{{ origen(m) }}</span>
+                </span>
+                <sw-icon name="flecha-derecha" [size]="13" class="text-subtle-foreground" />
+              }
+              @if (m.ubicacion_destino_id !== null) {
+                <span class="inline-flex items-center gap-1">
+                  <sw-icon name="ubicacion" [size]="13" />
+                  <span class="sw-code">{{ destino(m) }}</span>
+                </span>
+              }
+              @if (m.referencia) {
+                <span class="sw-code ml-auto text-subtle-foreground">{{ m.referencia }}</span>
+              }
+            </div>
+
+            @if (m.observaciones) {
+              <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{{ m.observaciones }}</p>
+            }
+          </li>
+        }
+      </ul>
+
+      <sw-pagination
+        [rango]="rango()"
+        [page]="page()"
+        [hasNext]="cruda().hasNext"
+        [hasPrev]="cruda().hasPrev"
+        [total]="filas().length"
+        (prev)="irA(page() - 1)"
+        (next)="irA(page() + 1)"
+      />
+    }
+  </section>
+</div>

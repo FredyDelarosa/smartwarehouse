@@ -1,0 +1,333 @@
+<div class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="space-y-4">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p class="sw-eyebrow">Catálogo</p>
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          Productos
+        </h1>
+        <p class="mt-1 text-sm text-muted-foreground">
+          Alta, edición y baja del catálogo. El stock de cada producto se consulta en vivo.
+        </p>
+      </div>
+
+      <div class="flex gap-2">
+        @if (puedeCrear()) {
+          <a
+            routerLink="/productos/nuevo"
+            class="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover"
+          >
+            <sw-icon name="mas" [size]="16" />
+            Nuevo producto
+          </a>
+        }
+        <sw-btn
+          label="Actualizar"
+          icon="cargando"
+          variant="secondary"
+          [loading]="listado.isLoading() || resultados.isLoading()"
+          (click)="refrescar()"
+        />
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="sw-card flex flex-wrap items-center gap-3 p-3">
+      <div class="relative min-w-0 flex-1">
+        <label for="buscar-producto" class="sr-only-focusable">
+          Buscar producto por nombre o código
+        </label>
+        <sw-icon
+          name="buscar"
+          [size]="17"
+          class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
+        />
+        <input
+          id="buscar-producto"
+          type="search"
+          name="buscar-producto"
+          autocomplete="off"
+          [value]="termino()"
+          (input)="onInput($event)"
+          placeholder="Buscar por nombre o código…"
+          class="sw-input pl-9"
+          [attr.aria-describedby]="enBusqueda() ? 'buscar-resultados' : null"
+        />
+        @if (termino()) {
+          <button
+            type="button"
+            (click)="limpiarBusqueda()"
+            class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground"
+            aria-label="Limpiar la búsqueda"
+          >
+            <sw-icon name="cerrar" [size]="15" />
+          </button>
+        }
+      </div>
+
+      <button
+        type="button"
+        (click)="alternarSoloActivos()"
+        [attr.aria-pressed]="soloActivos()"
+        class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+        [class]="
+          soloActivos()
+            ? 'border-accent/40 bg-accent/10 text-accent'
+            : 'border-border-strong bg-surface text-muted-foreground hover:bg-surface-sunken'
+        "
+      >
+        <sw-icon name="filtro" [size]="16" />
+        Solo activos
+      </button>
+    </div>
+  </header>
+
+  <!-- Listado -->
+  <section class="sw-card overflow-hidden">
+    @if (listado.isLoading() || resultados.isLoading()) {
+      <sw-skeleton-table [filas]="6" [columnas]="['3.5rem', '28%', '8%', '12%', '12%', '6rem']" />
+    } @else if (listado.error() ?? resultados.error(); as error) {
+      <div role="alert" class="flex items-start gap-3 p-4">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudo cargar el catálogo</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="refrescar()"
+          class="shrink-0 rounded-lg border border-danger/40 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+        >
+          Reintentar
+        </button>
+      </div>
+    } @else if (filas().length === 0) {
+      <sw-empty-state
+        icon="paquete"
+        [title]="enBusqueda() ? 'Ningún producto coincide' : 'No hay productos que mostrar'"
+        [description]="
+          enBusqueda()
+            ? 'Prueba con menos palabras o con el código exacto (por ejemplo T001).'
+            : soloActivos()
+              ? 'No hay productos activos. Cambia el filtro para ver también los dados de baja.'
+              : 'El catálogo está vacío: da de alta el primer producto del almacén.'
+        "
+        [action]="puedeCrear() && !enBusqueda()"
+      >
+        @if (puedeCrear() && !enBusqueda()) {
+          <a routerLink="/productos/nuevo">
+            <sw-btn label="Nuevo producto" icon="mas" />
+          </a>
+        }
+      </sw-empty-state>
+    } @else {
+      <p id="buscar-resultados" class="sr-only-focusable" aria-live="polite">
+        {{ filas().length }} productos en pantalla
+      </p>
+
+      <!-- Tabla en escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <caption class="sr-only-focusable">
+            Catálogo de productos con su stock, estado y acciones
+          </caption>
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Código</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Nombre</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Unidad</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Stock
+              </th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Estado</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of filas(); track p.id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/productos', p.id]"
+                    class="sw-code text-accent hover:underline"
+                  >
+                    {{ p.codigo }}
+                  </a>
+                </td>
+                <td class="px-4 py-2.5">
+                  <a
+                    [routerLink]="['/productos', p.id]"
+                    class="block truncate font-medium text-foreground hover:text-accent hover:underline"
+                  >
+                    {{ p.nombre }}
+                  </a>
+                  @if (p.descripcion) {
+                    <span class="block max-w-md truncate text-[11px] text-muted-foreground">
+                      {{ p.descripcion }}
+                    </span>
+                  }
+                </td>
+                <td class="px-4 py-2.5 text-muted-foreground">{{ p.unidad_medida }}</td>
+                <td class="px-4 py-2.5 text-right">
+                  @if (stockDe(p); as stock) {
+                    <p class="sw-tabular font-semibold text-foreground">
+                      {{ fmt.formatNumber(stock.stock_total) }}
+                    </p>
+                    <sw-badge [tone]="estadoStock(p).tone" class="mt-0.5">
+                      {{ estadoStock(p).texto }}
+                    </sw-badge>
+                  } @else {
+                    <span
+                      class="inline-block h-4 w-10 animate-pulse rounded bg-surface-sunken"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="sr-only-focusable">Cargando stock</span>
+                  }
+                </td>
+                <td class="px-4 py-2.5">
+                  <sw-badge [tone]="tonoEstado(p.activo)" [dot]="true">
+                    {{ p.activo ? 'Activo' : 'Inactivo' }}
+                  </sw-badge>
+                </td>
+                <td class="px-4 py-2.5">
+                  <div class="flex items-center justify-end gap-1.5">
+                    @if (puedeEditar()) {
+                      <a
+                        [routerLink]="['/productos', p.id, 'editar']"
+                        class="inline-flex items-center justify-center rounded-lg border border-border-strong bg-surface p-2 text-foreground transition-colors hover:bg-surface-sunken"
+                        [attr.aria-label]="'Editar ' + p.nombre"
+                      >
+                        <sw-icon name="editar" [size]="16" />
+                      </a>
+                    }
+                    @if (puedeEliminar()) {
+                      <sw-btn
+                        label="Dar de baja"
+                        icon="borrar"
+                        variant="secondary"
+                        [iconOnly]="true"
+                        size="md"
+                        (click)="pedirBaja(p)"
+                      />
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tarjetas en móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (p of filas(); track p.id) {
+          <li class="space-y-2 px-4 py-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <a
+                  [routerLink]="['/productos', p.id]"
+                  class="block truncate text-sm font-medium text-foreground"
+                >
+                  {{ p.nombre }}
+                </a>
+                <p class="sw-code text-muted-foreground">{{ p.codigo }}</p>
+              </div>
+              <sw-badge [tone]="tonoEstado(p.activo)" [dot]="true">
+                {{ p.activo ? 'Activo' : 'Inactivo' }}
+              </sw-badge>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-xs text-muted-foreground">
+                @if (stockDe(p); as stock) {
+                  <span class="sw-tabular font-semibold text-foreground">
+                    {{ fmt.formatNumber(stock.stock_total) }}
+                  </span>
+                  {{ p.unidad_medida }} · mín.
+                  {{ fmt.formatNumber(p.stock_minimo) }}
+                  <sw-badge [tone]="estadoStock(p).tone" class="ml-1">
+                    {{ estadoStock(p).texto }}
+                  </sw-badge>
+                } @else {
+                  <span class="text-subtle-foreground">Consultando stock…</span>
+                }
+              </p>
+
+              <div class="flex shrink-0 items-center gap-1.5">
+                @if (puedeEditar()) {
+                  <a
+                    [routerLink]="['/productos', p.id, 'editar']"
+                    class="inline-flex items-center justify-center rounded-lg border border-border-strong bg-surface p-2 text-foreground transition-colors hover:bg-surface-sunken"
+                    [attr.aria-label]="'Editar ' + p.nombre"
+                  >
+                    <sw-icon name="editar" [size]="16" />
+                  </a>
+                }
+                @if (puedeEliminar()) {
+                  <sw-btn
+                    label="Dar de baja"
+                    icon="borrar"
+                    variant="secondary"
+                    [iconOnly]="true"
+                    size="md"
+                    (click)="pedirBaja(p)"
+                  />
+                }
+              </div>
+            </div>
+          </li>
+        }
+      </ul>
+
+      <!-- Paginación: solo en el listado paginado, la búsqueda no la soporta. -->
+      @if (enBusqueda()) {
+        <p class="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+          {{ filas().length }} coincidencias para «{{ terminoDebounced().trim() }}». La búsqueda no
+          pagina: el backend devuelve hasta {{ limiteBusqueda }} resultados por término.
+        </p>
+      } @else {
+        <sw-pagination
+          [rango]="rango()"
+          [page]="page()"
+          [hasNext]="paginaActual().hasNext"
+          [hasPrev]="paginaActual().hasPrev"
+          [total]="filas().length"
+          (prev)="irAPagina(page() - 1)"
+          (next)="irAPagina(page() + 1)"
+        />
+      }
+    }
+  </section>
+</div>
+
+<!-- Confirmación de baja -->
+@if (bajaAbierta() && bajaObjetivo(); as producto) {
+  <sw-modal
+    [abierto]="bajaAbierta()"
+    [title]="'Dar de baja ' + producto.codigo"
+    subtitle="El producto dejará de aparecer en el catálogo activo. El histórico de movimientos se conserva."
+    size="sm"
+    [footer]="true"
+    (cerrar)="cancelarBaja()"
+  >
+    <p class="text-sm text-muted-foreground">
+      ¿Seguro que quieres dar de baja <span class="font-medium text-foreground">{{ producto.nombre }}</span
+      >?
+    </p>
+
+    <div sw-modal-footer class="flex gap-2">
+      <sw-btn label="Cancelar" variant="secondary" [disabled]="dandoDeBaja()" (click)="cancelarBaja()" />
+      <sw-btn
+        label="Dar de baja"
+        icon="borrar"
+        variant="danger"
+        [loading]="dandoDeBaja()"
+        [disabled]="dandoDeBaja()"
+        (click)="confirmarBaja()"
+      />
+    </div>
+  </sw-modal>
+}

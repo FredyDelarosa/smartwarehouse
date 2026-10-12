@@ -1,0 +1,132 @@
+<div class="mx-auto max-w-2xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Sin permiso -->
+  @if (!puedeReportar()) {
+    <sw-empty-state
+      icon="sin-permiso"
+      title="No puedes reportar incidencias"
+      description="Tu rol no tiene el permiso de creación de incidencias. Contacta con un supervisor si crees que es un error."
+    >
+      <a routerLink="/incidencias">
+        <sw-btn label="Volver al listado" variant="secondary" />
+      </a>
+    </sw-empty-state>
+  } @else {
+    <!-- Encabezado -->
+    <header class="flex items-start gap-3">
+      <span
+        class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-warning-surface text-warning"
+        aria-hidden="true"
+      >
+        <sw-icon name="incidencia" [size]="20" />
+      </span>
+      <div class="min-w-0">
+        <p class="sw-eyebrow">Incidencias</p>
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          Reportar incidencia
+        </h1>
+        <p class="mt-1 text-sm text-muted-foreground">
+          Cuanto más exacto sea el reporte, antes vuelve a cuadrar el inventario.
+        </p>
+      </div>
+    </header>
+
+    @if (errorServidor(); as mensaje) {
+      <div
+        role="alert"
+        class="flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+      >
+        <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+        <span>{{ mensaje }}</span>
+      </div>
+    }
+
+    <form (submit)="onSubmit($event)" novalidate class="space-y-5">
+      <section class="sw-card space-y-5 p-5">
+        <!-- Tipo -->
+        <div>
+          <label for="tipo" class="mb-1.5 block text-sm font-medium text-foreground">
+            Tipo de incidencia <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <select
+            id="tipo"
+            class="sw-input"
+            [value]="tipoActual()"
+            (change)="onTipo($event)"
+          >
+            @for (t of tipos; track t) {
+              <option [value]="t">{{ ETIQUETA_TIPO[t] }}</option>
+            }
+          </select>
+          <p class="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+            <sw-icon name="info" [size]="13" class="mt-px shrink-0" />
+            {{ descripcionTipo() }}
+          </p>
+        </div>
+
+        <!-- Producto (opcional) -->
+        <div>
+          <sw-producto-picker
+            [formField]="form.producto_id"
+            label="Producto"
+            [obligatorio]="false"
+            placeholder="Opcional: busca por nombre o código"
+          />
+        </div>
+
+        <!-- Ubicación (opcional) -->
+        <div>
+          <sw-ubicacion-picker
+            [formField]="form.ubicacion_id"
+            label="Ubicación"
+            [obligatorio]="false"
+            placeholder="Opcional: dónde lo encontraste"
+          />
+        </div>
+      </section>
+
+      <section class="sw-card p-5">
+        <label for="descripcion" class="mb-1.5 block text-sm font-medium text-foreground">
+          ¿Qué ocurrió? <span class="text-danger" aria-hidden="true">*</span>
+        </label>
+        <textarea
+          id="descripcion"
+          rows="4"
+          [formField]="form.descripcion"
+          [attr.aria-invalid]="errorDe(form.descripcion) ? 'true' : null"
+          [attr.aria-describedby]="errorDe(form.descripcion) ? 'descripcion-error' : 'descripcion-ayuda'"
+          placeholder="Por ejemplo: en el pasillo P3, estante A, hay 40 tornillos pero el sistema dice 350."
+          class="sw-input resize-y"
+        ></textarea>
+
+        @if (errorDe(form.descripcion); as error) {
+          <p id="descripcion-error" class="mt-1.5 flex items-center gap-1 text-xs text-danger">
+            <sw-icon name="alerta" [size]="13" />
+            {{ error }}
+          </p>
+        } @else {
+          <p id="descripcion-ayuda" class="mt-1.5 text-xs text-muted-foreground">
+            Mínimo 10 caracteres. Indica pasillo, estante y nivel, y cuánto había según el sistema
+            frente a lo que encontraste.
+          </p>
+        }
+      </section>
+
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <sw-btn
+          label="Cancelar"
+          variant="secondary"
+          type="button"
+          [disabled]="enviando()"
+          (click)="cancelar()"
+        />
+        <sw-btn
+          type="submit"
+          label="Reportar incidencia"
+          icon="incidencia"
+          [loading]="enviando()"
+          [disabled]="enviando()"
+        />
+      </div>
+    </form>
+  }
+</div>

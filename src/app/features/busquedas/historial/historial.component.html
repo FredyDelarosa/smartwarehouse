@@ -1,0 +1,147 @@
+<div class="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6">
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="sw-eyebrow">Paso 2 de 2</p>
+      <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        Historial de búsquedas
+      </h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Cada búsqueda confirmada alimenta los indicadores de tiempo del proyecto.
+      </p>
+    </div>
+
+    <div class="flex gap-2">
+      <a routerLink="/busquedas">
+        <sw-btn label="Nueva búsqueda" icon="buscar" size="sm" />
+      </a>
+      <sw-btn
+        label="Actualizar"
+        icon="cargando"
+        variant="secondary"
+        size="sm"
+        (click)="refrescar()"
+      />
+    </div>
+  </header>
+
+  <!-- Resumen -->
+  @if (resumen(); as r) {
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div class="sw-card p-4">
+        <p class="sw-eyebrow">Búsquedas</p>
+        <p class="sw-tabular mt-1.5 text-2xl font-semibold leading-none text-foreground">
+          {{ r.total }}
+        </p>
+      </div>
+      <div class="sw-card p-4">
+        <p class="sw-eyebrow">Tiempo medio</p>
+        <p class="sw-tabular mt-1.5 text-2xl font-semibold leading-none text-info">
+          {{ fmt.formatDuration(r.promedio) }}
+        </p>
+      </div>
+      <div class="sw-card p-4">
+        <p class="sw-eyebrow">Exitosas</p>
+        <p class="sw-tabular mt-1.5 text-2xl font-semibold leading-none text-success">
+          {{ r.exitosas }}
+        </p>
+      </div>
+      <div class="sw-card p-4">
+        <p class="sw-eyebrow">Tasa de éxito</p>
+        <p class="sw-tabular mt-1.5 text-2xl font-semibold leading-none text-foreground">
+          {{ r.tasaExito.toFixed(0) }}%
+        </p>
+      </div>
+    </div>
+  }
+
+  <!-- Tabla -->
+  <section class="sw-card overflow-hidden">
+    @if (datos.isLoading()) {
+      <sw-skeleton-table [filas]="6" [columnas]="['18%', '28%', '14%', '16%', '16%']" />
+    } @else if (filas().length === 0) {
+      <sw-empty-state
+        icon="reloj"
+        title="Aún no hay búsquedas registradas"
+        description="Cuando confirmes dónde encontraste un producto, aparecerá aquí con su tiempo."
+      >
+        <a routerLink="/busquedas">
+          <sw-btn label="Hacer la primera búsqueda" icon="buscar" />
+        </a>
+      </sw-empty-state>
+    } @else {
+      <!-- Escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <caption class="sr-only-focusable">
+            Historial de búsquedas con producto, resultado y tiempo empleado
+          </caption>
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Producto</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Término</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Resultado</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Tiempo</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Cuándo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (f of filas(); track f.id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5">
+                  @if (f.producto_id) {
+                    <a
+                      [routerLink]="['/productos', f.producto_id]"
+                      class="font-medium text-foreground hover:text-accent hover:underline"
+                    >
+                      {{ f.producto_nombre ?? f.termino_busqueda }}
+                    </a>
+                  } @else {
+                    <span class="text-muted-foreground">—</span>
+                  }
+                </td>
+                <td class="px-4 py-2.5 text-muted-foreground">{{ f.termino_busqueda }}</td>
+                <td class="px-4 py-2.5">
+                  <sw-badge [tone]="f.exito ? 'success' : 'danger'" [dot]="true">
+                    {{ f.exito ? 'Encontrado' : 'No encontrado' }}
+                  </sw-badge>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <sw-badge [tone]="tonoTiempo(f.tiempo_busqueda_segundos)">
+                    {{ fmt.formatDuration(f.tiempo_busqueda_segundos) }}
+                  </sw-badge>
+                </td>
+                <td class="px-4 py-2.5 text-right text-xs text-muted-foreground">
+                  {{ fmt.formatRelative(f.fecha) }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (f of filas(); track f.id) {
+          <li class="flex items-center justify-between gap-3 px-4 py-3">
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium text-foreground">
+                {{ f.producto_nombre ?? f.termino_busqueda }}
+              </p>
+              <div class="mt-1 flex items-center gap-2">
+                <sw-badge [tone]="f.exito ? 'success' : 'danger'" [dot]="true">
+                  {{ f.exito ? 'Encontrado' : 'No encontrado' }}
+                </sw-badge>
+                <span class="text-[11px] text-muted-foreground">
+                  {{ fmt.formatRelative(f.fecha) }}
+                </span>
+              </div>
+            </div>
+            <sw-badge [tone]="tonoTiempo(f.tiempo_busqueda_segundos)" size="md">
+              {{ fmt.formatDuration(f.tiempo_busqueda_segundos) }}
+            </sw-badge>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</div>

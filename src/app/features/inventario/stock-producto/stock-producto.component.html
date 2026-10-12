@@ -1,0 +1,271 @@
+<div class="mx-auto max-w-4xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div class="min-w-0">
+      <a
+        routerLink="/inventario"
+        class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <sw-icon name="flecha-izquierda" [size]="14" />
+        Volver a las alertas
+      </a>
+      <p class="sw-eyebrow mt-2">Stock por producto</p>
+      @if (stock.value(); as s) {
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          {{ s.nombre }}
+        </h1>
+        <p class="sw-code mt-0.5 text-muted-foreground">{{ s.codigo }}</p>
+      } @else {
+        <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          Stock del producto
+        </h1>
+      }
+    </div>
+
+    <div class="flex gap-2">
+      @if (idNumero(); as id) {
+        <a [routerLink]="['/productos', id]">
+          <sw-btn label="Ficha del producto" icon="paquete" variant="secondary" size="sm" />
+        </a>
+      }
+      <sw-btn
+        label="Actualizar"
+        icon="cargando"
+        variant="secondary"
+        size="sm"
+        [loading]="stock.isLoading()"
+        (click)="refrescar()"
+      />
+    </div>
+  </header>
+
+  <!-- id inválido -->
+  @if (idNumero() === null) {
+    <sw-empty-state
+      icon="alerta"
+      title="Producto no válido"
+      description="El enlace apunta a un producto que no existe. Vuelve al inventario y elige uno de la lista."
+      [action]="true"
+    >
+      <a routerLink="/inventario">
+        <sw-btn label="Ver inventario" icon="inventario" variant="secondary" />
+      </a>
+    </sw-empty-state>
+  } @else if (stock.isLoading()) {
+    <sw-skeleton-table
+      [filas]="4"
+      [columnas]="['30%', '20%', '20%', '20%']"
+      label="Cargando stock del producto"
+    />
+  } @else if (stock.error(); as error) {
+    <div role="alert" class="sw-card border-danger/40 bg-danger-surface p-4">
+      <div class="flex items-start gap-3">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudo consultar el stock</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="refrescar()"
+          class="shrink-0 rounded-lg border border-danger/40 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+        >
+          Reintentar
+        </button>
+      </div>
+    </div>
+  } @else if (stock.value(); as s) {
+    <!-- Indicadores -->
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <sw-indicator-card
+        label="Stock total"
+        [value]="fmt.formatNumber(s.stock_total)"
+        [unit]="s.unidad_medida"
+        icon="inventario"
+        [tone]="s.requiere_alerta ? 'danger' : 'success'"
+        [hint]="distribucion().length + (distribucion().length === 1 ? ' ubicación' : ' ubicaciones')"
+      />
+      <sw-indicator-card
+        label="Stock mínimo"
+        [value]="fmt.formatNumber(s.stock_minimo)"
+        [unit]="s.unidad_medida"
+        icon="grafico"
+        tone="neutral"
+        hint="Umbral configurado para el producto"
+      />
+      <sw-indicator-card
+        label="Estado"
+        [value]="s.requiere_alerta ? 'Bajo mínimo' : 'Cubierto'"
+        icon="alerta"
+        [tone]="s.requiere_alerta ? 'danger' : 'success'"
+        [hint]="fmt.formatPercent(cobertura(), 0) + ' del mínimo cubierto'"
+      />
+    </div>
+
+    <!-- Cobertura -->
+    <section class="sw-card p-4">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-sm font-semibold text-foreground">Cobertura del mínimo</h2>
+        <sw-badge [tone]="tonoEstado(s.requiere_alerta)" [dot]="true">
+          {{ s.requiere_alerta ? 'Requiere reposición' : 'Sin alerta' }}
+        </sw-badge>
+      </div>
+
+      <div
+        class="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-surface-sunken"
+        role="img"
+        [attr.aria-label]="
+          'Cobertura del stock mínimo: ' + fmt.formatPercent(cobertura(), 0)
+        "
+      >
+        <div
+          class="h-full rounded-full transition-[width]"
+          [class]="s.requiere_alerta ? 'bg-danger' : 'bg-success'"
+          [style.width.%]="cobertura() > 100 ? 100 : cobertura()"
+        ></div>
+      </div>
+      <p class="sw-tabular mt-2 text-xs text-muted-foreground">
+        {{ fmt.formatNumber(s.stock_total) }} de {{ fmt.formatNumber(s.stock_minimo) }}
+        {{ s.unidad_medida }} ·
+        @if (s.requiere_alerta) {
+          <span class="text-danger">
+            faltan {{ fmt.formatNumber(s.stock_minimo - s.stock_total) }}
+          </span>
+        } @else {
+          <span class="text-success">
+            excedente de {{ fmt.formatNumber(s.stock_total - s.stock_minimo) }}
+          </span>
+        }
+      </p>
+    </section>
+
+    <!-- Distribución -->
+    <section class="sw-card overflow-hidden">
+      <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div class="flex items-center gap-2">
+          <sw-icon name="ubicacion" [size]="17" class="text-muted-foreground" />
+          <h2 class="text-sm font-semibold text-foreground">Dónde está</h2>
+        </div>
+        <sw-badge tone="neutral" size="md">
+          {{ distribucion().length }}
+          {{ distribucion().length === 1 ? 'ubicación' : 'ubicaciones' }}
+        </sw-badge>
+      </header>
+
+      @if (distribucion().length === 0) {
+        <sw-empty-state
+          icon="vacio"
+          title="Este producto no tiene existencias registradas"
+          description="Ninguna ubicación tiene stock de este producto. Registra una entrada para empezar a contabilizarlo."
+        />
+      } @else {
+        <!-- Tabla en escritorio -->
+        <div class="hidden overflow-x-auto sm:block">
+          <table class="w-full text-sm">
+            <caption class="sr-only-focusable">
+              Distribución del stock del producto por ubicación
+            </caption>
+            <thead>
+              <tr class="border-b border-border text-left">
+                <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Ubicación</th>
+                <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Pasillo</th>
+                <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Estante</th>
+                <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Nivel</th>
+                <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">
+                  Proporción
+                </th>
+                <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                  Cantidad
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (d of distribucion(); track d.ubicacion_id) {
+                <tr class="sw-table-row border-b border-border last:border-0">
+                  <td class="px-4 py-2.5">
+                    <sw-badge tone="accent" size="md">
+                      <span class="sw-code">{{ d.codigo_ubicacion }}</span>
+                    </sw-badge>
+                  </td>
+                  <td class="px-4 py-2.5 font-medium text-foreground">{{ d.pasillo }}</td>
+                  <td class="px-4 py-2.5 text-muted-foreground">{{ d.estante }}</td>
+                  <td class="px-4 py-2.5 text-muted-foreground">{{ d.nivel }}</td>
+                  <td class="w-40 px-4 py-2.5">
+                    <div
+                      class="h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken"
+                      role="img"
+                      [attr.aria-label]="
+                        d.codigo_ubicacion + ': ' + fmt.formatPercent(porcentajeTotal(d), 0) + ' del total'
+                      "
+                    >
+                      <div
+                        class="h-full rounded-full bg-accent"
+                        [style.width.%]="ancho(d)"
+                      ></div>
+                    </div>
+                    <p class="sw-tabular mt-1 text-[11px] text-muted-foreground">
+                      {{ fmt.formatPercent(porcentajeTotal(d), 0) }}
+                    </p>
+                  </td>
+                  <td class="sw-tabular px-4 py-2.5 text-right font-semibold text-foreground">
+                    {{ fmt.formatNumber(d.cantidad) }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tarjetas en móvil -->
+        <ul class="divide-y divide-border sm:hidden">
+          @for (d of distribucion(); track d.ubicacion_id) {
+            <li class="space-y-2 px-4 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <sw-badge tone="accent" size="md">
+                  <span class="sw-code">{{ d.codigo_ubicacion }}</span>
+                </sw-badge>
+                <span class="sw-tabular text-sm font-semibold text-foreground">
+                  {{ fmt.formatNumber(d.cantidad) }}
+                  <span class="text-xs font-normal text-muted-foreground">
+                    {{ s.unidad_medida }}
+                  </span>
+                </span>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p class="sw-eyebrow">Pasillo</p>
+                  <p class="mt-0.5 text-lg font-semibold leading-none text-foreground">
+                    {{ d.pasillo }}
+                  </p>
+                </div>
+                <div>
+                  <p class="sw-eyebrow">Estante</p>
+                  <p class="mt-0.5 text-lg font-semibold leading-none text-foreground">
+                    {{ d.estante }}
+                  </p>
+                </div>
+                <div>
+                  <p class="sw-eyebrow">Nivel</p>
+                  <p class="mt-0.5 text-lg font-semibold leading-none text-foreground">
+                    {{ d.nivel }}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                class="h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken"
+                role="img"
+                [attr.aria-label]="
+                  d.codigo_ubicacion + ': ' + fmt.formatPercent(porcentajeTotal(d), 0) + ' del total'
+                "
+              >
+                <div class="h-full rounded-full bg-accent" [style.width.%]="ancho(d)"></div>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>

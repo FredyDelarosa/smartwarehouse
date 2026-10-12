@@ -1,0 +1,325 @@
+<div class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+  <!-- Encabezado -->
+  <header class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="sw-eyebrow">Inventario</p>
+      <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        Incidencias
+      </h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Reporta y resuelve lo que no cuadra con el inventario: faltantes, productos mal ubicados o
+        dañados.
+      </p>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      @if (store.can('incidencias:crear')) {
+        <a routerLink="/incidencias/nueva">
+          <sw-btn label="Reportar incidencia" icon="mas" size="sm" />
+        </a>
+      }
+      <sw-btn
+        label="Actualizar"
+        icon="cargando"
+        variant="secondary"
+        size="sm"
+        [loading]="datos.isLoading()"
+        (click)="datos.reload()"
+      />
+    </div>
+  </header>
+
+  <!-- Filtros -->
+  <section class="sw-card p-4" aria-label="Filtros del listado">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div>
+        <label for="filtro-tipo" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Tipo
+        </label>
+        <select id="filtro-tipo" class="sw-input" [value]="tipo()" (change)="onTipo($event)">
+          <option value="">Todos los tipos</option>
+          @for (t of tipos; track t) {
+            <option [value]="t">{{ ETIQUETA_TIPO[t] }}</option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label for="filtro-estado" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Estado
+        </label>
+        <select id="filtro-estado" class="sw-input" [value]="estado()" (change)="onEstado($event)">
+          <option value="todas">Todas</option>
+          <option value="abiertas">Abiertas</option>
+          <option value="resueltas">Resueltas</option>
+        </select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-2">
+        <div>
+          <label for="filtro-desde" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Desde
+          </label>
+          <input
+            id="filtro-desde"
+            type="date"
+            class="sw-input"
+            [value]="desde()"
+            (change)="onDesde($event)"
+          />
+        </div>
+        <div>
+          <label for="filtro-hasta" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Hasta
+          </label>
+          <input
+            id="filtro-hasta"
+            type="date"
+            class="sw-input"
+            [value]="hasta()"
+            (change)="onHasta($event)"
+          />
+        </div>
+      </div>
+    </div>
+
+    @if (hayFiltros()) {
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <p class="text-xs text-muted-foreground">Filtros activos sobre {{ rango() }}.</p>
+        <sw-btn label="Limpiar filtros" variant="ghost" size="sm" (click)="limpiarFiltros()" />
+      </div>
+    }
+  </section>
+
+  <!-- Listado -->
+  <section class="sw-card overflow-hidden">
+    @if (datos.isLoading()) {
+      <sw-skeleton-table [filas]="8" [columnas]="['12%', '14%', '32%', '14%', '12%']" />
+    } @else if (datos.error(); as error) {
+      <div role="alert" class="flex items-start gap-3 p-4">
+        <sw-icon name="alerta" [size]="18" class="mt-0.5 shrink-0 text-danger" />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-danger">No se pudieron cargar las incidencias</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">{{ error.message }}</p>
+        </div>
+        <sw-btn label="Reintentar" variant="secondary" size="sm" (click)="datos.reload()" />
+      </div>
+    } @else if (filas().length === 0) {
+      <sw-empty-state
+        [icon]="hayFiltros() ? 'filtro' : 'incidencia'"
+        [title]="hayFiltros() ? 'Ninguna incidencia coincide con los filtros' : 'Sin incidencias registradas'"
+        [description]="
+          hayFiltros()
+            ? 'Cambia el tipo, el estado o el rango de fechas para ver más resultados.'
+            : 'Si un producto no aparece donde debería, repórtalo: es la forma más rápida de que el inventario vuelva a cuadrar.'
+        "
+      >
+        @if (hayFiltros()) {
+          <sw-btn label="Limpiar filtros" variant="secondary" (click)="limpiarFiltros()" />
+        } @else if (store.can('incidencias:crear')) {
+          <a routerLink="/incidencias/nueva">
+            <sw-btn label="Reportar la primera" icon="mas" />
+          </a>
+        }
+      </sw-empty-state>
+    } @else {
+      <!-- Tabla en escritorio -->
+      <div class="hidden overflow-x-auto sm:block">
+        <table class="w-full text-sm">
+          <caption class="sr-only-focusable">
+            Incidencias de inventario con tipo, descripción, producto, ubicación, estado y fecha
+          </caption>
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Tipo</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Descripción</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Producto</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Ubicación</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Estado</th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                Fecha
+              </th>
+              <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">
+                <span class="sr-only-focusable">Acciones</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (i of filas(); track i.id) {
+              <tr class="sw-table-row border-b border-border last:border-0">
+                <td class="px-4 py-2.5 align-top">
+                  <sw-badge [tone]="TONE_TIPO[i.tipo]" [title]="DESCRIPCION_TIPO[i.tipo]">
+                    {{ ETIQUETA_TIPO[i.tipo] }}
+                  </sw-badge>
+                </td>
+                <td class="max-w-md px-4 py-2.5 align-top">
+                  <p class="line-clamp-2 text-foreground">{{ i.descripcion || 'Sin descripción' }}</p>
+                </td>
+                <td class="px-4 py-2.5 align-top">
+                  @if (i.producto_id !== null) {
+                    <a
+                      [routerLink]="['/productos', i.producto_id]"
+                      class="text-accent hover:underline"
+                    >
+                      {{ producto(i) ?? ('#' + i.producto_id) }}
+                    </a>
+                  } @else {
+                    <span class="text-muted-foreground">—</span>
+                  }
+                </td>
+                <td class="px-4 py-2.5 align-top">
+                  @if (i.ubicacion_id !== null) {
+                    <span class="sw-code text-muted-foreground">{{ ubicacion(i) }}</span>
+                  } @else {
+                    <span class="text-muted-foreground">—</span>
+                  }
+                </td>
+                <td class="px-4 py-2.5 align-top">
+                  <sw-badge [tone]="i.resuelta ? 'success' : 'warning'" [dot]="true">
+                    {{ i.resuelta ? 'Resuelta' : 'Abierta' }}
+                  </sw-badge>
+                  @if (i.resuelta && i.fecha_resolucion) {
+                    <p class="mt-1 text-[11px] text-muted-foreground">
+                      {{ fmt.formatRelative(i.fecha_resolucion) }}
+                    </p>
+                  }
+                </td>
+                <td
+                  class="px-4 py-2.5 text-right align-top text-xs text-muted-foreground"
+                  [attr.title]="fmt.formatDateTime(i.fecha)"
+                >
+                  {{ fmt.formatRelative(i.fecha) }}
+                </td>
+                <td class="px-4 py-2.5 text-right align-top">
+                  @if (!i.resuelta && puedeResolver()) {
+                    <sw-btn
+                      label="Resolver"
+                      icon="check"
+                      variant="secondary"
+                      size="sm"
+                      (click)="abrirResolver(i)"
+                    />
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tarjetas en móvil -->
+      <ul class="divide-y divide-border sm:hidden">
+        @for (i of filas(); track i.id) {
+          <li class="px-4 py-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 flex-wrap items-center gap-2">
+                <sw-badge [tone]="TONE_TIPO[i.tipo]">{{ ETIQUETA_TIPO[i.tipo] }}</sw-badge>
+                <sw-badge [tone]="i.resuelta ? 'success' : 'warning'" [dot]="true">
+                  {{ i.resuelta ? 'Resuelta' : 'Abierta' }}
+                </sw-badge>
+              </div>
+              <span class="shrink-0 text-xs text-muted-foreground">
+                {{ fmt.formatRelative(i.fecha) }}
+              </span>
+            </div>
+
+            <p class="mt-2 text-sm leading-relaxed text-foreground">
+              {{ i.descripcion || 'Sin descripción' }}
+            </p>
+
+            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              @if (i.producto_id !== null) {
+                <span class="inline-flex items-center gap-1">
+                  <sw-icon name="paquete" [size]="13" />
+                  {{ producto(i) ?? ('#' + i.producto_id) }}
+                </span>
+              }
+              @if (i.ubicacion_id !== null) {
+                <span class="sw-code inline-flex items-center gap-1">
+                  <sw-icon name="ubicacion" [size]="13" />
+                  {{ ubicacion(i) }}
+                </span>
+              }
+            </div>
+
+            @if (!i.resuelta && puedeResolver()) {
+              <div class="mt-3">
+                <sw-btn
+                  label="Resolver"
+                  icon="check"
+                  variant="secondary"
+                  size="sm"
+                  [fullWidth]="true"
+                  (click)="abrirResolver(i)"
+                />
+              </div>
+            }
+          </li>
+        }
+      </ul>
+
+      <sw-pagination
+        [rango]="rango()"
+        [page]="page()"
+        [hasNext]="cruda().hasNext"
+        [hasPrev]="cruda().hasPrev"
+        [total]="filas().length"
+        (prev)="irA(page() - 1)"
+        (next)="irA(page() + 1)"
+      />
+    }
+  </section>
+
+  <!-- Confirmación de resolución -->
+  <sw-modal
+    title="Resolver incidencia"
+    subtitle="Esta acción marca la incidencia como resuelta y queda registrada con tu usuario."
+    size="sm"
+    [footer]="true"
+    [abierto]="pendiente() !== null"
+    (cerrar)="cerrarModal()"
+  >
+    @if (pendiente(); as i) {
+      <div class="space-y-3">
+        <div class="flex items-center gap-2">
+          <sw-badge [tone]="TONE_TIPO[i.tipo]">{{ ETIQUETA_TIPO[i.tipo] }}</sw-badge>
+          <span class="text-xs text-muted-foreground">
+            Reportada {{ fmt.formatDateTime(i.fecha) }}
+          </span>
+        </div>
+
+        <p class="text-sm leading-relaxed text-foreground">
+          {{ i.descripcion || 'Sin descripción' }}
+        </p>
+
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+          <dt class="text-muted-foreground">Producto</dt>
+          <dd class="text-right font-medium text-foreground">
+            {{ producto(i) ?? 'No indicado' }}
+          </dd>
+          <dt class="text-muted-foreground">Ubicación</dt>
+          <dd class="sw-code text-right font-medium text-foreground">
+            {{ ubicacion(i) ?? 'No indicada' }}
+          </dd>
+        </dl>
+      </div>
+    }
+
+    <div sw-modal-footer class="flex w-full justify-end gap-2">
+      <sw-btn
+        label="Cancelar"
+        variant="secondary"
+        [disabled]="confirmando()"
+        (click)="cerrarModal()"
+      />
+      <sw-btn
+        label="Confirmar"
+        icon="check"
+        variant="success"
+        [loading]="confirmando()"
+        [disabled]="confirmando()"
+        (click)="confirmar()"
+      />
+    </div>
+  </sw-modal>
+</div>
