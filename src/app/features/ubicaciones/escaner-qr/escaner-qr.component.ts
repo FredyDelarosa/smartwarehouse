@@ -54,7 +54,8 @@ export class EscanerQrComponent implements OnDestroy {
 
   private readonly videoRef = viewChild<ElementRef<HTMLVideoElement>>('video');
   private stream: MediaStream | null = null;
-  private rafId: number | null = null;
+  /** Id del temporizador del bucle. Es un setTimeout, NO un requestAnimationFrame. */
+  private timerId: ReturnType<typeof setTimeout> | null = null;
   private detector: BarcodeDetector | null = null;
   private decodificarJsQr: typeof import('jsqr').default | null = null;
   private lienzo: HTMLCanvasElement | null = null;
@@ -76,22 +77,26 @@ export class EscanerQrComponent implements OnDestroy {
 
   /**
    * Diagnóstico en pantalla. Sin esto, un fallo de cámara y un QR simplemente
-   * fuera de plano se ven IGUAL: una pantalla negra. Con esto se distinguen.
+   * fuera de plano se ven IGUAL: una pantalla negra. Y —peor— un bucle que
+   * reintenta y falla en silencio también se veía igual, por eso se cuenta
+   * también lo que falla y por qué.
    */
   protected readonly diagnostico = signal<{
     decodificador: 'nativo' | 'jsQR' | 'pendiente';
     resolucion: string;
-    fotogramas: number;
-    fotogramasDetectados: number;
-    pista: string;
+    listo: boolean;
+    pausado: boolean;
+    intentos: number;
+    leyendo: boolean;
+    error: string;
   } | null>(null);
 
-  private readonly fotogramas = signal(0);
 
   protected iniciarCamara(): void {
     this.errorCamara.set(null);
     this.permisoDenegado.set(false);
-    this.fotogramas.set(0);
+    this.intentos = 0;
+    this.ultimoError = '';
     this.iniciando.set(true);
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -110,17 +115,22 @@ export class EscanerQrComponent implements OnDestroy {
       })
       .then((stream) => {
         this.stream = stream;
-        // El `<video>` está siempre en el DOM (oculto con CSS), así que aquí sí
-        // existe. Antes vivía dentro de un `@else` y todavía no estaba creado:
-        // el stream llegaba sin destino y la pantalla se quedaba en negra.
-        const video = this.videoRef()?.nativeElement;
-        if (video) {
-          video.srcObject = stream;
-          void video.play();
-        }
+        // El <video> ya está en el DOM (oculto con CSS). Primero se muestra el
+        // marco y EN UN FRAME DEJAS ENGANCHAR el stream: si se llama a play()
+        // sobre un elemento `display:none`, hay navegadores que no arrancan la
+        // reproducción y `videoWidth` se queda en 0 para siempre, que es
+        // justo lo que hace que el bucle no llegue a detectar nada.
         this.activo.set(true);
         this.iniciando.set(false);
-        void this.prepararDecodificacion().then(() => this.escanearEnBucle());
+
+        requestAnimationFrame(() => {
+          const video = this.videoRef()?.nativeElement;
+          if (video) {
+            video.srcObject = stream;
+            void video.play().catch(() => undefined);
+          }
+          void this.prepararDecodificacion().then(() => this.escanearEnBucle());
+        });
       })
       .catch((err: unknown) => {
         this.iniciando.set(false);
@@ -142,9 +152,12 @@ export class EscanerQrComponent implements OnDestroy {
   protected detenerCamara(): void {
     this.activo.set(false);
     this.diagnostico.set(null);
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
+    if (this.timerId !== null) {
+      // clearTimeout, NO cancelAnimationFrame: el bucle se programa con
+      // setTimeout y cancelarAnimationFrame no lo detendría — el escáner
+      // seguiría leyendo en segundo plano con la cámara ya apagada.
+      clearTimeout(this.timerId);
+      this.timerId = null;
     }
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
@@ -203,23 +216,45 @@ export class EscanerQrComponent implements OnDestroy {
     const video = this.videoRef()?.nativeElement;
     this.diagnostico.set({
       decodificador,
-      resolucion: video && video.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : '—',
-      fotogramas: this.fotogramas(),
-      fotogramasDetectados: 0,
-      pista: '',
+      resolucion: video?.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : '—',
+      listo: false,
+      pausado: video?.paused ?? true,
+      intentos: this.intentos,
+      leyendo: false,
+      error: this.ultimoError,
     });
   }
 
-  /** Ciclo de lectura. Ligero: no bloquea la UI. */
+  /**
+   * Programa el siguiente intento.
+   *
+   * Se usa `setTimeout` y NO `requestAnimationFrame`: rAF se congela cuando la
+   * pestaña pierde el foco o el dispositivo entra en reposo, y entonces el
+   * escáner se quedaba congelado sin explicación (el típico "buscando…"
+   * eterno). `setTimeout` sigue corriendo salvo que la página esté congelada
+   * del todo por el sistema.
+   */
+  private programar(): void {
+    this.timerId = setTimeout(() => this.escanearEnBucle(), 80);
+  }
+
+  /** Ciclo de lectura. No bloquea la UI. */
   private escanearEnBucle(): void {
     const video = this.videoRef()?.nativeElement;
     if (!video || !this.activo()) return;
 
-    // Sin fotogramas todavía: reintento sin consumir CPU en detect().
-    if (video.readyState < 2 || video.videoWidth === 0) {
-      this.rafId = requestAnimationFrame(() => this.escanearEnBucle());
+    const listo = video.readyState >= 2 && video.videoWidth > 0;
+    this.registrarEstado(video, listo);
+
+    if (!listo) {
+      // Se cuenta como intento para que el diagnóstico no se quede en "0
+      // fotogramas" cuando en realidad lo que falla es la señal de vídeo.
+      this.contarIntento(false);
+      this.programar();
       return;
     }
+
+    this.contarIntento(true);
 
     if (this.detector) {
       this.detector
@@ -227,65 +262,88 @@ export class EscanerQrComponent implements OnDestroy {
         .then((codigos: DetectedBarcode[]) => {
           const codigo = codigos[0]?.rawValue;
           if (codigo) return this.procesar(codigo);
-          this.contarFrame();
-          this.rafId = requestAnimationFrame(() => this.escanearEnBucle());
+          this.programar();
         })
-        .catch(() => {
-          // El nativo puede existir y aun así fallar (permisos, GPU, driver).
-          // No es motivo para dejar al usuario con una pantalla negra.
+        .catch((err: unknown) => {
+          // El nativo puede existir y fallar en cada llamada (permisos, GPU,
+           // driver). Cuenta como error y degrada; si no, el diagnóstico
+          // mentiría mostrando "buscando" para siempre.
+          this.ultimoError = err instanceof Error ? err.message : String(err);
           this.degradarAJsQr();
-          this.rafId = requestAnimationFrame(() => this.escanearEnBucle());
+          this.programar();
         });
       return;
     }
 
     if (this.decodificarJsQr && this.ctx && this.lienzo) {
-      // jsQR es de CPU: se reduce a media frecuencia (cada 3 frames) para no
-      // dejar el ventilador del portátil chillando en un almacén.
-      if (this.fotogramas() % 3 === 0) {
-        const v = video.videoWidth;
-        const h = video.videoHeight;
-        // 480 px es de sobra para un QR de estante y mantiene el coste bajo.
-        const escala = Math.min(1, 480 / Math.max(v, h));
-        this.lienzo.width = Math.round(v * escala);
-        this.lienzo.height = Math.round(h * escala);
-        this.ctx.drawImage(video, 0, 0, this.lienzo.width, this.lienzo.height);
-        const datos = this.ctx.getImageData(0, 0, this.lienzo.width, this.lienzo.height);
-        // jsQR recibe el array de píxeles y las dimensiones, no el ImageData.
-        // `attemptBothOrientations` cubre QRs girados, algo normal si el
-        // trabajador inclina el dispositivo.
-        const r = this.decodificarJsQr(datos.data, datos.width, datos.height, {
-          inversionAttempts: 'attemptBoth',
-        });
-        if (r?.data) return this.procesar(r.data);
-      }
-      this.contarFrame();
-      this.rafId = requestAnimationFrame(() => this.escanearEnBucle());
+      const r = this.leerConJsQr(video);
+      if (r?.data) return this.procesar(r.data);
+      this.programar();
       return;
     }
 
-    // Ningún decodificador disponible: no se puede escanear.
-    this.errorCamara.set(
-      'Este navegador no puede leer códigos QR. Escribe el código a mano abajo.',
-    );
-    this.activo.set(false);
+    // Ningún decodificador listo todavía (jsQR se carga de forma asíncrona).
+    // Se espera en vez de rendirse: da tiempo a que termine la carga perezosa.
+    this.intentos++;
+    this.registrarEstado(video, listo);
+    if (this.intentos > 40) {
+      this.errorCamara.set(
+        'No se pudo preparar el lector de QR. Recarga la página o escribe el código a mano.',
+      );
+      this.activo.set(false);
+      return;
+    }
+    this.programar();
   }
 
-  private contarFrame(): void {
-    const n = this.fotogramas() + 1;
-    this.fotogramas.set(n);
-    this.diagnostico.update((d) => (d ? { ...d, fotogramas: n, resolucion: this.resolucionActual() } : d));
+  /** Lee un frame con jsQR sobre el canvas. */
+  private leerConJsQr(video: HTMLVideoElement): { data: string } | null {
+    if (!this.ctx || !this.lienzo || !this.decodificarJsQr) return null;
+
+    const v = video.videoWidth;
+    const h = video.videoHeight;
+    // 480 px de sobra para un QR de estante y mantiene bajo el coste de CPU.
+    const escala = Math.min(1, 480 / Math.max(v, h));
+    this.lienzo.width = Math.round(v * escala);
+    this.lienzo.height = Math.round(h * escala);
+
+    try {
+      this.ctx.drawImage(video, 0, 0, this.lienzo.width, this.lienzo.height);
+      const datos = this.ctx.getImageData(0, 0, this.lienzo.width, this.lienzo.height);
+      // `attemptBoth` cubre QRs girados, algo normal si el trabajador inclina
+      // el dispositivo.
+      return this.decodificarJsQr(datos.data, datos.width, datos.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+    } catch (err) {
+      // getImageData lanza si el lienzo está "tainted". Pasa si algún ajuste
+      // del navegador bloquea la lectura del vídeo.
+      this.ultimoError = err instanceof Error ? err.message : String(err);
+      return null;
+    }
   }
 
-  private resolucionActual(): string {
-    const v = this.videoRef()?.nativeElement;
-    return v && v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '—';
+  /** Contador de intentos de lectura sobre frames con señal. */
+  private intentos = 0;
+  private ultimoError = '';
+
+  private contarIntento(conFrame: boolean): void {
+    this.intentos++;
+    this.diagnostico.update((d) => (d ? { ...d, intentos: this.intentos, leyendo: conFrame } : d));
   }
 
-  /** Se llama cuando el `<video>` ya tiene dimensiones listas. */
-  protected onVideoListo(): void {
+  /** Refleja el estado real del `<video>` en el diagnóstico. */
+  private registrarEstado(video: HTMLVideoElement, listo: boolean): void {
     this.diagnostico.update((d) =>
-      d ? { ...d, resolucion: this.resolucionActual() } : d,
+      d
+        ? {
+            ...d,
+            resolucion: video.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : '—',
+            listo,
+            pausado: video.paused,
+            error: this.ultimoError,
+          }
+        : d,
     );
   }
 

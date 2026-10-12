@@ -31,7 +31,6 @@
         playsinline
         muted
         autoplay
-        (loadedmetadata)="onVideoListo()"
       ></video>
 
       <!-- Mira: encuadre cuadrado, el código va centrado -->
@@ -107,7 +106,7 @@
         igual: una pantalla negra y nada más. Estos números dicen cuál es cuál.
     -->
     @if (activo() && diagnostico(); as d) {
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border bg-surface-sunken px-5 py-3 text-xs sm:grid-cols-4">
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-border bg-surface-sunken px-5 py-3 text-xs sm:grid-cols-3">
         <div>
           <dt class="text-muted-foreground">Decodificador</dt>
           <dd class="font-medium text-foreground">
@@ -115,22 +114,26 @@
           </dd>
         </div>
         <div>
-          <dt class="text-muted-foreground">Resolución</dt>
+          <dt class="text-muted-foreground">Vídeo</dt>
           <dd class="font-mono font-medium text-foreground">{{ d.resolucion }}</dd>
         </div>
         <div>
-          <dt class="text-muted-foreground">Fotogramas</dt>
-          <dd class="font-mono font-medium text-foreground">{{ d.fotogramas }}</dd>
+          <dt class="text-muted-foreground">Intentos</dt>
+          <dd class="font-mono font-medium text-foreground">{{ d.intentos }}</dd>
         </div>
-        <div>
+        <div class="col-span-2 sm:col-span-3">
           <dt class="text-muted-foreground">Estado</dt>
-          <dd class="text-muted-foreground">
-            @if (d.resolucion === '—') {
-              Sin señal de cámara
-            } @else if (d.fotogramas < 5) {
-              Buscando…
+          <dd class="font-medium" [class.text-warning]="d.error" [class.text-foreground]="!d.error">
+            @if (d.error) {
+              {{ d.error }}
+            } @else if (d.resolucion === '—') {
+              La cámara no entrega imagen. Revisa el permiso en los ajustes.
+            } @else if (d.pausado) {
+              El vídeo está en pausa: vuelve a activar la cámara.
+            } @else if (!d.leyendo) {
+              Preparando el lector…
             } @else {
-              Apunta al QR
+              Leyendo. Acércate al QR y ponlo dentro del encuadre.
             }
           </dd>
         </div>
