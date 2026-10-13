@@ -34,7 +34,7 @@ Probado con `curl` y en el navegador contra `localhost:8000`.
 | **BUG-3** | `resolver` rechazaba al Administrador (403) | `POST /incidencias/30005/resolver` → **200** con token de Administrador |
 | **PET-1** | `GET /categorias/` daba 500 | **200 con las 8 categorías.** El detalle muestra "Tornillería" y el desplegable lista los 8 nombres |
 | **PET-2** | `codigo_qr` sin unicidad | `POST /ubicaciones/` con QR repetido → **409 `UBICACION_DUPLICADO`** |
-| **PET-3** | Listado de ubicaciones sin productos | 🟡 Media | ~1 h | ⚠️ **Falta endpoint** |
+| **PET-3** | Listado de ubicaciones sin productos | 🟡 Media | ~1 h | ✅ **Resuelto 2026-10-13** |
 | **PET-1b** | `activo` added a las 4 capas | La columna llega en la respuesta y **el filtro funciona** (probado desactivando una fila en la BD: 7 vs 8) |
 | **OBS-6** | `producto_nombre` siempre era `null` | Ahora devuelve el nombre canónico; la tabla distingue "Producto" de "Término" |
 | **BUG-4** | `POST`/`PATCH`/`DELETE` de `/categorias` no persistían | Ciclo completo verificado: crear persiste, desactivar persiste y filtra, borrar borra |
@@ -995,7 +995,10 @@ En cuanto responda 200 con ese shape, el desplegable se rellena solo.
 
 ---
 
-## PET-3 · Stock por ubicación (listado de ubicaciones)
+## ✅ PET-3 · Stock por ubicación (listado de ubicaciones)
+
+> **ESTADO: RESUELTO el 2026-10-13.** `GET /inventario/ubicaciones` implementado y
+> desplegado. El listado muestra código, nombre y cantidad por ubicación.
 
 **Petición.** Que el listado de ubicaciones muestre qué productos hay en cada
 una, con su código.
@@ -1035,7 +1038,7 @@ Se pide `codigo` **y** `nombre`: el código es lo que está impreso en la etique
 del estante, y el nombre es lo que entiende el trabajador. Con solo el `id` no
 se puede pintar nada legible.
 
-**El frontend ya está listo.** La columna "Productos" existe en escritorio y en
+**Implementado.** La columna "Productos" existe en escritorio y en
 móvil y consume exactamente este shape. Mientras el endpoint devuelva 404, la
 columna muestra `—` y el encabezado avisa de que no está disponible; el resto
 del listado sigue funcionando. En cuanto exista, se rellena solo.
