@@ -11,6 +11,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { AuthStore } from '../../core/store/auth.store';
 import { AuthService } from '../../core/services/auth.service';
+import { VersionService } from '../../core/services/version.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { IconComponent } from '../../shared/components/icon.component';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -124,6 +125,19 @@ import { BadgeComponent } from '../../shared/components/badge.component';
               <sw-icon name="escudo" [size]="16" />
               Cambiar contraseña
             </a>
+            <div class="border-t border-border px-4 py-2.5">
+              <!--
+                Versión en pantalla. Sin esto no hay forma de saber qué
+                versión está cargada en un dispositivo concreto: el service
+                worker sirve la anterior hasta la segunda recarga, así que
+                "he actualizado y sigue igual" no se puede diagnosticar. Es la
+                primera pregunta que hay que hacer antes de depurar nada más.
+              -->
+              <p class="text-[11px] text-muted-foreground">
+                Versión
+                <span class="font-mono text-foreground">{{ version }}</span>
+              </p>
+            </div>
             <button
               type="button"
               (click)="salir()"
@@ -142,6 +156,8 @@ import { BadgeComponent } from '../../shared/components/badge.component';
 })
 export class TopbarComponent {
   readonly store = inject(AuthStore);
+  /** Se muestra en el menú de usuario para poder diagnosticar versiones. */
+  readonly version = inject(VersionService).build;
   private readonly auth = inject(AuthService);
   private readonly theme = inject(ThemeService);
   private readonly router = inject(Router);
