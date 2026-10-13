@@ -28,6 +28,7 @@ import { ApiError } from '../../../core/models/error.model';
 import type { Producto } from '../../../core/models/producto.model';
 import { ApiService } from '../../../core/services/api.service';
 import { CategoriasService } from '../../../core/services/categorias.service';
+import { CodigoProductoService } from '../../../core/services/codigo-producto.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { errorDe as mensajeDe, esInvalido } from '../../../shared/utils/form-helpers';
 import { ButtonComponent } from '../../../shared/components/button.component';
@@ -109,6 +110,12 @@ export class ProductoFormComponent {
   /** Catálogo de categorías. Se pide una vez y se cachea. */
   protected readonly categorias = inject(CategoriasService);
 
+  /** Convención de códigos: `T001`, `HM01`… según la categoría. */
+  protected readonly codigos = inject(CodigoProductoService);
+
+  /** ¿El código lo ha rellenado la app (y por tanto se puede pisar)? */
+  protected readonly codigoSugerido = signal(false);
+
   /** Route param `:id` (solo en la ruta de edición). */
   readonly id = input<string>();
 
@@ -122,6 +129,46 @@ export class ProductoFormComponent {
   });
 
   protected readonly esEdicion = computed(() => this.idNumero() !== null);
+
+  /** Nombre de la categoría elegida, que es lo que manda en la convención. */
+  private readonly nombreCategoriaElegida = computed<string | null>(() => {
+    const id = Number(this.model().categoria_id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    return this.categorias.items().find((c) => c.id === id)?.nombre ?? null;
+  });
+
+  /** Explicación de la convención para la categoría elegida. */
+  protected readonly pistaCodigo = computed(() =>
+    this.esEdicion() ? null : this.codigos.pistaDe(this.nombreCategoriaElegida()),
+  );
+
+  /**
+   * Rellena el código con el siguiente libre de la serie de la categoría.
+   *
+   * Solo al **elegir** categoría, no mientras se escribe: si se regenerara en
+   * cada cambio se pisaría el código que la persona esté tecleando.
+   *
+   * Si el campo ya tiene algo escrito (porque es una edición o porque el
+   * usuario empezó a teclear), no se toca.
+   */
+  protected sugerirCodigo(): void {
+    if (this.esEdicion()) return;
+    if (this.codigoSugerido()) return; // ya se propuso uno para esta categoría
+    if (this.model().codigo.trim()) return; // no pisar lo que se está escribiendo
+
+    const propuesta = this.codigos.siguiente(this.nombreCategoriaElegida());
+    if (!propuesta) return;
+
+    this.model.update((m) => ({ ...m, codigo: propuesta }));
+    this.codigoSugerido.set(true);
+  }
+
+  /** Si el usuario edita a mano el código, deja de propuesta automática. */
+  protected onCodigoManual(event: Event): void {
+    const valor = (event.target as HTMLInputElement).value;
+    this.codigoSugerido.set(false);
+    if (valor.trim()) this.codigos.reservar(valor);
+  }
 
   /** Id de categoría del producto en edición, para no perderlo al guardar. */
   protected readonly categoriaActual = computed<number | null>(() => {
@@ -199,6 +246,8 @@ export class ProductoFormComponent {
     // El catálogo se pide aunque hoy el backend devuelva 404: así, en cuanto
     // exista el endpoint, el `<select>` se rellena solo sin tocar nada.
     this.categorias.cargar();
+    // Códigos ya usados, para proponer el siguiente libre de la serie.
+    this.codigos.cargar();
 
     effect(() => {
       const producto = this.existente.value();

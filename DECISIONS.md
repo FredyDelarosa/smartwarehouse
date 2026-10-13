@@ -34,6 +34,7 @@ Probado con `curl` y en el navegador contra `localhost:8000`.
 | **BUG-3** | `resolver` rechazaba al Administrador (403) | `POST /incidencias/30005/resolver` → **200** con token de Administrador |
 | **PET-1** | `GET /categorias/` daba 500 | **200 con las 8 categorías.** El detalle muestra "Tornillería" y el desplegable lista los 8 nombres |
 | **PET-2** | `codigo_qr` sin unicidad | `POST /ubicaciones/` con QR repetido → **409 `UBICACION_DUPLICADO`** |
+| **PET-3** | Listado de ubicaciones sin productos | 🟡 Media | ~1 h | ⚠️ **Falta endpoint** |
 | **PET-1b** | `activo` added a las 4 capas | La columna llega en la respuesta y **el filtro funciona** (probado desactivando una fila en la BD: 7 vs 8) |
 | **OBS-6** | `producto_nombre` siempre era `null` | Ahora devuelve el nombre canónico; la tabla distingue "Producto" de "Término" |
 | **BUG-4** | `POST`/`PATCH`/`DELETE` de `/categorias` no persistían | Ciclo completo verificado: crear persiste, desactivar persiste y filtra, borrar borra |
@@ -991,6 +992,69 @@ En cuanto responda 200 con ese shape, el desplegable se rellena solo.
 > `repo.list(skip=…, limit=…, solo_activas=…)` y
 > `CategoriaRepositoryImpl.list(self)` no acepta argumentos → `TypeError` → 500.
 > Arreglo: alinear el puerto (`categoria_repository.py`) con el caso de uso.
+
+---
+
+## PET-3 · Stock por ubicación (listado de ubicaciones)
+
+**Petición.** Que el listado de ubicaciones muestre qué productos hay en cada
+una, con su código.
+
+**Por qué no se puede resolver solo en el frontend.** `GET /ubicaciones/`
+devuelve la ubicación y nada más. Las dos rutas que sí traen productos son de
+**una en una**:
+
+| Ruta | Devuelve | Peticiones para 20 filas |
+|---|---|---|
+| `GET /ubicaciones/qr/{código}` | una ubicación con sus productos | 20 |
+| `GET /inventario/producto/{id}` | un producto con su distribución | 50 (todas) |
+
+Ninguna sirve para un listado. No es un problema de rendimiento: es que el
+endpoint no existe. Con 150 ubicaciones serían 150 peticiones secuenciales por
+recorrer el catálogo.
+
+**Contrato que hay que implementar:**
+
+```
+GET /api/v1/inventario/ubicaciones?skip=0&limit=50&con_stock=true
+```
+
+```typescript
+type UbicacionStock = {
+  ubicacion_id: number;
+  codigo_ubicacion: string;   // "P3-A-01"
+  pasillo: string;
+  estante: string;
+  nivel: string;
+  productos: { producto_id: number; codigo: string; nombre: string; cantidad: number }[];
+  total_unidades: number;
+};
+```
+
+Se pide `codigo` **y** `nombre`: el código es lo que está impreso en la etiqueta
+del estante, y el nombre es lo que entiende el trabajador. Con solo el `id` no
+se puede pintar nada legible.
+
+**El frontend ya está listo.** La columna "Productos" existe en escritorio y en
+móvil y consume exactamente este shape. Mientras el endpoint devuelva 404, la
+columna muestra `—` y el encabezado avisa de que no está disponible; el resto
+del listado sigue funcionando. En cuanto exista, se rellena solo.
+
+```python
+@router.get("/inventario/ubicaciones")
+async def stock_por_ubicacion(
+    skip: int = 0, limit: int = Query(50, ge=1, le=500),
+    con_stock: bool = True,
+    repo: InventarioRepoDep = None,
+):
+    # SELECT i.ubicacion_id, u.codigo_ubicacion, u.pasillo, u.estante, u.nivel,
+    #        p.id, p.codigo, p.nombre, i.cantidad
+    #   FROM inventario i
+    #   JOIN ubicaciones u ON u.id = i.ubicacion_id
+    #   JOIN productos   p ON p.id = i.producto_id
+    #  ORDER BY u.codigo_ubicacion, p.codigo
+    return await repo.listar_con_productos(skip=skip, limit=limit, solo_con_stock=con_stock)
+```
 
 ---
 

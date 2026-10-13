@@ -86,6 +86,14 @@
               <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Nivel</th>
               <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">Código QR</th>
               <th scope="col" class="px-4 py-2 text-right font-medium text-muted-foreground">Estado</th>
+              <th scope="col" class="px-4 py-2 font-medium text-muted-foreground">
+                Productos
+                @if (stockNoDisponible()) {
+                  <span class="ml-1 font-normal text-subtle-foreground" title="Requiere el endpoint de inventario por ubicación">
+                    (no disponible)
+                  </span>
+                }
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -110,6 +118,32 @@
                     {{ u.activo ? 'Activa' : 'Inactiva' }}
                   </sw-badge>
                 </td>
+                <td class="px-4 py-2.5">
+                  @if (stockDe(u.id); as productos) {
+                    @if (productos.length === 0) {
+                      <span class="text-xs text-subtle-foreground">Vacía</span>
+                    } @else {
+                      <div class="space-y-1">
+                        @for (p of productos; track p.producto_id) {
+                          <a
+                            [routerLink]="['/productos', p.producto_id]"
+                            class="group flex items-baseline gap-2 hover:underline"
+                          >
+                            <code class="sw-code font-semibold text-foreground">{{ p.codigo }}</code>
+                            <span class="truncate text-xs text-muted-foreground group-hover:text-accent">
+                              {{ p.nombre }}
+                            </span>
+                            <span class="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+                              ×{{ p.cantidad }}
+                            </span>
+                          </a>
+                        }
+                      </div>
+                    }
+                  } @else {
+                    <span class="text-xs text-subtle-foreground">—</span>
+                  }
+                </td>
               </tr>
             }
           </tbody>
@@ -119,15 +153,32 @@
       <!-- Móvil -->
       <ul class="divide-y divide-border sm:hidden">
         @for (u of visibles(); track u.id) {
-          <li>
-            <a [routerLink]="['/ubicaciones', u.id]" class="flex items-center justify-between gap-3 px-4 py-3">
+          <li class="px-4 py-3">
+            <a [routerLink]="['/ubicaciones', u.id]" class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <p class="sw-code font-semibold text-foreground">{{ u.codigo_ubicacion }}</p>
                 <p class="mt-0.5 text-xs text-muted-foreground">
                   {{ u.pasillo }} · {{ u.estante }} · {{ u.nivel }}
                 </p>
+                @if (stockDe(u.id); as productos) {
+                  @if (productos.length === 0) {
+                    <p class="mt-1 text-xs text-subtle-foreground">Sin productos</p>
+                  } @else {
+                    <ul class="mt-1.5 space-y-0.5">
+                      @for (p of productos; track p.producto_id) {
+                        <li class="flex items-baseline gap-1.5 text-xs">
+                          <code class="sw-code font-semibold text-foreground">{{ p.codigo }}</code>
+                          <span class="truncate text-muted-foreground">{{ p.nombre }}</span>
+                          <span class="ml-auto shrink-0 font-mono text-muted-foreground">
+                            ×{{ p.cantidad }}
+                          </span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                }
               </div>
-              <sw-icon name="flecha-derecha" [size]="16" class="shrink-0 text-subtle-foreground" />
+              <sw-icon name="flecha-derecha" [size]="16" class="mt-0.5 shrink-0 text-subtle-foreground" />
             </a>
           </li>
         }

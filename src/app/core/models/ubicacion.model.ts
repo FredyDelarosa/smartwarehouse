@@ -54,3 +54,43 @@ export type UbicacionConProductos = {
   ubicacion: Ubicacion;
   productos: ProductoEnUbicacion[];
 };
+
+/**
+ * Ubicación con su stock, para el listado.
+ *
+ * ⚠️ **PENDIENTE DE BACKEND**: hoy `GET /ubicaciones/` **no** incluye productos
+ * ni existencias. Para ver el catálogo haría falta pedir `/ubicaciones/qr/{c}`
+ * una vez por cada fila, y con 20 filas por página son 20 peticiones idénticas
+ * en bucle; con 150 ubicaciones, 150. No es un problema de rendimiento, es una
+ * ausencia de endpoint.
+ *
+ * Contrato que debe cumplir `GET /inventario/ubicaciones`:
+ *
+ * ```typescript
+ * type UbicacionStock = {
+ *   ubicacion_id: number;
+ *   codigo_ubicacion: string;
+ *   pasillo: string;
+ *   estante: string;
+ *   nivel: string;
+ *   productos: { producto_id: number; codigo: string; nombre: string; cantidad: number }[];
+ *   total_unidades: number;
+ * };
+ * ```
+ *
+ * Se trae `codigo` **y** `nombre`: el código es lo que se lee en la etiqueta
+ * del estante, y el nombre es lo que entiende el trabajador. Con solo el id no
+ * se puede mostrar nada legible.
+ *
+ * Mientras el endpoint no exista, `stockPorUbicacion` queda vacío y la columna
+ * muestra "—". Ver DECISIONS.md §PET-3.
+ */
+export type UbicacionStock = {
+  ubicacion_id: number;
+  codigo_ubicacion: string;
+  pasillo: string;
+  estante: string;
+  nivel: string;
+  productos: ProductoEnUbicacion[];
+  total_unidades: number;
+};
