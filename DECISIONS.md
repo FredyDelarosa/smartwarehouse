@@ -1244,6 +1244,195 @@ formulario y se convierte a `number` una sola vez, al construir el payload.
 Intentar `[ngValue]` con `NgSelectOption` exigiría además importar
 `FormsModule` (no es standalone) sin cambiar el resultado.
 
+## ✅ PET-4 fase 2 — Alta de almacén con su administrador
+
+### Lo que se añadió
+
+`POST /api/v1/auth/onboarding` (público). Crea el almacén y su administrador en
+una sola transacción y devuelve el token, para que el cliente entre
+directamente sin escribir la contraseña otra vez.
+
+```json
+{
+  "almacen": { "nombre": "Logística Norte", "direccion": "Calle Mayor 1" },
+  "usuario": { "nombre": "Rita Gómez", "email": "rita@logisticanorte.es",
+               "password": "Prueba1234!" }
+}
+```
+
+Respuesta `201`:
+
+```json
+{
+  "almacen": { "id": 30002, "nombre": "Logística Norte", ... },
+  "usuario":  { "id": 120002, "email": "rita@...", "nombre_rol": "Administrador" },
+  "token":    { "access_token": "...", "refresh_token": "..." }
+}
+```
+
+### Decisiones
+
+**El rol no se acepta en el cuerpo.** Quien da de alta el almacén es su
+responsable: si se le asignara Supervisor o Almacenero, se quedaría sin poder
+administrar su propio almacén. Admitirlo sería permitir autoasignarse permisos.
+
+**`almacen_id` no viaja en el JWT.** Vive en `usuarios.almacen_id` y lo lee
+`get_current_user` en cada petición. Meterlo en el token obligaría a invalidar
+las sesiones de todos los usuarios cada vez que se moviera a alguien de
+almacén.
+
+**Riesgo conocido:** es la única ruta pública que escribe. Para cerrarla hace
+falta un `rate limit` en nginx o Cloudflare sobre `/api/v1/auth/onboarding`.
+No es un problema mientras sea una demo; sí lo sería en producción abierta.
+
+**No se crear `POST /almacenes` a secas.** Un administrador de un almacén no
+debe poder crear otro almacén: el alta siempre es con su administrador.
+
+### Verificación
+
+```
+almacén nuevo: productos 0, ubicaciones 0, panel todo a 0
+almacén 1:     productos 50, ubicaciones 150, busquedas 74   (sin cambios)
+```
+
+---
+
+## 🐛 Lo que destapó la fase 2 — tres bugs que ya existían
+
+### 1. Diez endpoints de escritura no guardaban nada — **el más grave**
+
+`POST /movimientos/entrada` devolvía `201` con el movimiento `60001` y **no
+escribía una fila**:
+
+```
+201  respuesta: id 60001, tipo ENTRADA, cantidad 7
+     → movimientos: 45 (sigue 45)
+     → stock T001: 470 (sigue 470)
+```
+
+El repositorio hace `flush()`, que solo manda el INSERT dentro de la
+transacción abierta. `get_session()` no confirma al cerrarse, así que todo se
+deshacía al terminar la petición. **La respuesta era correcta y el frontend
+pintaba el éxito**: por eso llevaba tanto tiempo escondido. Lo único real eran
+los datos del seed.
+
+Afectaba a: `crear_producto`, `actualizar_producto`, `eliminar_producto`,
+`crear_ubicacion`, `registrar_entrada`, `registrar_salida`,
+`registrar_traslado`, `crear_incidencia`, `resolver_incidencia`.
+
+Las tres de movimientos comparten ahora un helper, `_registrar_y_confirmar`,
+porque un movimiento toca tres tablas (inventario origen, inventario destino y
+movimientos) y el commit va **detrás** del `execute`: si algo fallara a mitad,
+la rollback dejaría el stock intacto en vez de haber movido solo la mitad.
+
+**Cómo se comprueba que está bien:**
+
+```bash
+POST /movimientos/entrada  -> 201
+GET  /inventario/producto/1  -> stock 473 (antes 470)
+GET  /movimientos/?limit=1    -> la entrada está ahí
+```
+
+Si el stock no se mueve, vuelve a faltar el commit.
+
+### 2. Dos mappers con un `almacen_id` fantasma
+
+`apply_almacen` y `apply_categoria` asignaban `m.almacen_id`, que **no existe ni
+en el modelo ni en la entidad**. `POST /categorias` devolvía `500` con
+`AttributeError`.
+
+Esto explica por qué el BUG-4 parecía arreglado y no lo estaba: se añadió el
+`commit` que faltaba, pero el mapper seguía roto. **Crear una categoría nunca
+funcionó.**
+
+### 3. `POST /ubicaciones` permitía escribir en el almacén de otro
+
+`UbicacionCreateDTO` exigía `almacen_id` en el cuerpo y el caso de uso solo
+comprobaba que el almacén **existiera**, no que fuera del usuario:
+
+```
+Ana   (almacén 1)  POST /ubicaciones {almacen_id: 30002, ...}  -> 201
+Rita  (almacén 30002)  GET /ubicaciones  -> ve P9-A-01
+```
+
+El formulario del frontend mandaba `almacen_id: 1` hardcodeado, que era el
+lado del cliente del mismo bug.
+
+**Arreglo:** el almacén lo pone la ruta desde `current_user.almacen_id` y el
+DTO ya no lo acepta. Pydantic descarta el campo si un cliente antiguo lo manda,
+así que no rompe nada. En el frontend se quitó el campo del modelo del
+formulario, su validación y el tipo `UbicacionCreate`.
+
+---
+
+## 🧪 Los tests de integración escribían en la base de datos real
+
+Los tests usan `ASGITransport` contra la app entera, contra **la base de
+producción** (TiDB Cloud `smart_warehouse`, la misma que usa el servidor).
+
+Hasta ahora eso no se notaba porque los `commit` faltaban y sus escrituras se
+descartaban solas. **Al arreglarlos, cada `pytest` empezó a escribir de verdad**:
+tras dos pasadas el stock de T001 bajó de 470 a 460 y se acumulaban
+movimientos, ubicaciones y búsquedas basura.
+
+`tests/conftest.py` ahora envuelve cada test en una transacción que se deshace:
+
+- `SesionDeTest` traduce `commit()` en `flush()` — la escritura llega a la
+  conexión (para que los `refresh()` se comporten igual que en producción) pero
+  nunca se confirma.
+- El pool del engine se descarta entre tests. Sin eso, cada test con su propio
+  event loop hereda una conexión atada al loop anterior y pytest falla con
+  *"got Future attached to a different loop"*.
+
+Además se reparó la suite, que estaba rota:
+
+| Problema | Causa |
+|---|---|
+| 17 errores en cascada | fixture `event_loop`, que pytest-asyncio 1.4 ya no soporta |
+| 3 fallos | expectativas desactualizadas contra la base real |
+| 2 fallos (403) | los tests usaban `admin_token` y la ruta exige Almacenero o Supervisor |
+| 1 fallo (TypeError) | comparaba julio y septiembre de **2024**, un año sin datos, contra un histórico sembrado de **2025** |
+
+**35 tests en verde** y la base queda igual antes y después. Para comprobarlo:
+
+```bash
+.venv/bin/python -m pytest -q          # antes y después, los mismos números
+```
+
+### Si algún día quieres tests de verdad
+
+Esto sigue siendo integración contra la base real, solo que sin escribir. Lo
+correcto es una base `smart_warehouse_test`: cambiar `DB_NAME` en `.env` para
+los tests y no tocar la de producción. Entonces se puede quitar el
+`SesionDeTest` y dejar que commiten de verdad.
+
+---
+
+## 🛠️ El script de despliegue tenía dos fallos
+
+**El repositorio del frontend tenía 150 objetos de git en propiedad de `root`**,
+de un despliegue en el que el pull corrió como root. El resultado era:
+
+```
+error: insufficient permission for adding an object to repository database
+fatal: failed to write object
+```
+
+Arreglado con `chown -R ubuntu:ubuntu /srv/smartwarehouse/frontend/.git`.
+
+**El bloque de frontend del script no cambiaba de directorio.** Todo lo que
+Sigue (el `md5sum` de `package-lock.json`, `npm ci`, `ng build`, la ruta de
+`dist/`) asume que se está en el directorio del frontend, pero `pull_como_dueno`
+usa `git -C`, que no cambia el directorio. Solo se notaba cuando el build
+anterior había fallado, porque con `package-lock.json` sin cambios la ruta se
+corta antes.
+
+Añadido `cd "$FRONTEND"` justo después del pull.
+
+**Patrón a recordar:** el `pull` va como el **dueño real** de cada repo
+(backend = `smartwarehouse`, frontend = `ubuntu`), no como root, porque git
+rechaza *dubious ownership*.
+
 ## Resumen de desviaciones
 
 | # | Decisión | Plan | Realidad | Impacto |

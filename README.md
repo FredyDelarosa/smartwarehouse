@@ -314,9 +314,38 @@ Implementados los **Bloques 1, 2 y 3** del plan de trabajo.
 | BUG-3 | `resolver` rechazaba al Administrador con 403 | ✅ Corregido: responde 200 |
 | PET-1 | `GET /categorias/` daba 500 | ✅ Corregido: 200 con las 8 categorías reales |
 | PET-2 | `codigo_qr` sin unicidad | ✅ Corregido: responde 409 |
-| BUG-4 | `/categorias` no persistía nada (faltaba `commit()`) | ✅ Corregido: crear/desactivar/borrar verificados |
+| BUG-4 | `/categorias` no persistía nada (faltaba `commit()`) | ⚠️ **Parcial:** el `commit` se añadió, pero el `mapper` seguía roto con un `AttributeError`. Corregido de verdad el 2026-10-13 |
 
-Ambos están detallados con diagnóstico y corrección sugerida en
+### Los que aparecieron al implementar el alta de almacén
+
+Tres bugs que ya existían desde el principio y que el frontend no delataba
+porque **respondía con éxito**:
+
+| # | Incidencia | Por qué no se veía |
+|---|---|---|
+| BUG-5 | **Diez endpoints de escritura no guardaban nada.** `POST /movimientos/entrada` devolvía 201 con el movimiento 60001 y no escribía ninguna fila: faltaba `commit()` y `flush()` solo deja el INSERT dentro de la transacción abierta | El 201 era correcto y el frontend pintaba el éxito. Lo único real eran los datos del seed |
+| BUG-6 | `apply_almacen` y `apply_categoria` asignaban `m.almacen_id`, que no existe. `POST /categorias` daba 500 | Solo se veía al crear, no al listar |
+| BUG-7 | `POST /ubicaciones` con `almacen_id` en el cuerpo permitía escribir en el almacén de otro. Solo comprobaba que el almacén existiera | Con un solo almacén no hay a quién contaminar |
+
+**Cómo comprobar que están corregidos** (si el stock no sube, volvió a fallar
+el commit):
+
+```bash
+curl -X POST $API/api/v1/movimientos/entrada -H "Authorization: Bearer $TOK" \
+  -H 'Content-Type: application/json' \
+  -d '{"tipo":"ENTRADA","producto_id":1,"ubicacion_destino_id":30,"cantidad":3}'
+
+curl "$API/api/v1/inventario/producto/1" -H "Authorization: Bearer $TOK"
+# stock_total debe ser 473
+```
+
+### Alta de almacén (PET-4)
+
+`POST /api/v1/auth/onboarding` crea un almacén y su administrador en una sola
+transacción y devuelve la sesión ya iniciada. Ver
+[DECISIONS.md](./DECISIONS.md).
+
+Los detalles de los cuatro están con diagnóstico y corrección en
 **[DECISIONS.md](./DECISIONS.md)**.
 
 ### Mejoras pendientes (no bloquean)
