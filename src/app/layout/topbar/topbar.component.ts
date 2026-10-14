@@ -116,6 +116,21 @@ import { BadgeComponent } from '../../shared/components/badge.component';
                 {{ store.rolNombre() }}
               </sw-badge>
             </div>
+            @if (esAdministrador()) {
+              <!--
+                Configurar el almacén es del administrador: es quien decide la
+                numeración de pasillos y estantes que usarán los demás.
+              -->
+              <a
+                [routerLink]="['/almacen/configuracion']"
+                (click)="cerrarMenuUsuario()"
+                role="menuitem"
+                class="sw-nav-link m-1.5"
+              >
+                <sw-icon name="inventario" [size]="16" />
+                Configurar almacén
+              </a>
+            }
             <a
               [routerLink]="['/mi-cuenta']"
               (click)="cerrarMenuUsuario()"
@@ -161,6 +176,15 @@ export class TopbarComponent {
   private readonly auth = inject(AuthService);
   private readonly theme = inject(ThemeService);
   private readonly router = inject(Router);
+
+  /**
+   * Solo el administrador ve "Configurar almacén".
+   *
+   * El enlace se oculta en vez de dejar que la ruta lo rechace con un
+   * redirect: el rol decide qué parte de la interfaz existe, no solo a qué se
+   * puede llegar escribiendo la URL a mano.
+   */
+  readonly esAdministrador = computed(() => this.store.rolNombre() === 'Administrador');
 
   readonly menu = output<void>();
   readonly menuOpen = input<boolean>(false);

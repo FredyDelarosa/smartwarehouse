@@ -1433,6 +1433,129 @@ Añadido `cd "$FRONTEND"` justo después del pull.
 (backend = `smartwarehouse`, frontend = `ubuntu`), no como root, porque git
 rechaza *dubious ownership*.
 
+## ✅ PET-4 fases 3 y 4 — Cuestionario y generación de ubicaciones
+
+### Qué hace
+
+El usuario responde cinco preguntas y el sistema genera sus ubicaciones con su
+código y su QR:
+
+```
+1. Almacén   → nombre, dirección
+   Cuenta    → nombre, correo, contraseña (tú quedas como Administrador)
+2. Pasillos  → cuántos hay y cuántos estantes en cada uno
+3. Niveles   → cuántos niveles tiene cada estante
+4. Fuera de servicio → qué estantes están obstruidos (opcional)
+5. Confirmar → tabla con lo que se va a crear → «Crear»
+```
+
+Rutas: `/configuracion-inicial` (invitado, alta completa) y
+`/almacen/configuracion` (Administrador que amplía el almacén que ya tiene).
+
+### Endpoints
+
+| Ruta | Sesión | Qué hace |
+|---|---|---|
+| `POST /configuracion/previsualizar` | **no hace falta** | Dice cuántas filas habría. No escribe |
+| `POST /configuracion/generar` | Administrador | Crea las que falten |
+| `GET /configuracion/almacen` | cualquiera | Estado actual del almacén |
+
+### Por qué la previsualización no pide sesión
+
+Porque el cálculo es puro: sale del cuestionario y no escribe nada. Exigir rol
+de Administrador rompía el flujo, porque quien rellena el cuestionario todavía
+**no tiene cuenta** —la cuenta se crea en el último paso—. Le devolvía 401, el
+interceptor intentaba renovar un token inexistente y el mensaje que veía era
+«No hay sesión para renovar» en lugar de su tabla de previsualización.
+
+La ruta lee el usuario si viene, y solo para contar cuántas de esas
+ubicaciones ya existen en su almacén y avisar antes de duplicarlas. Sin
+sesión, `ya_existentes` es 0 porque no hay almacén al que mirar.
+
+### El estante es UNA letra. 26, no 99
+
+El código de ubicación es `P{pasillo}-{letra}-{nivel}` y lo valida
+`CodigoUbicacion`, el mismo value object que usa para las ubicaciones creadas a
+mano. Como el QR del almacén original ya está impreso con ese formato, cambiarlo
+obligaría a reimprimir las etiquetas de los 150 estantes que ya existen.
+
+El frontend replica el límite (26 letras, `LETRAS_ESTANTE`) para no mandar un
+cuerpo que el servidor va a rechazar con un 422.
+
+### Los estantes fuera de servicio se crean igual
+
+Un estante obstruido no se borra: ocupa sitio y mañana vuelve a estar en
+servicio. Marcarlo `activo=False` en vez de omitirlo deja el hueco visible y
+hace que ponerlo en marcha sea cambiar un campo, no recrear 30 filas ni
+reimprimir 30 etiquetas.
+
+### Repetir la generación no falla
+
+Las ubicaciones cuyo código ya existe se **omiten** en vez de devolver un
+duplicado. Añadir un pasillo nuevo a un almacén ya configurado es el caso
+normal, no un error.
+
+---
+
+## 🐛 Bugs encontrados al construir el cuestionario
+
+### 1. `ubicaciones` tenía el código único en TODA la tabla
+
+Igual que `productos` en la fase 1, pero esta tabla no se había migrado:
+
+```
+codigo_ubicacion   ÚNICO global   ← impedía que el almacén 2 tuviera un P1-A-01
+codigo_qr          ÚNICO global   ← impedía repetir el QR del almacén 1
+```
+
+`scripts/alter_multialmacen.py` lo corrige: `uq_ubicaciones_almacen_codigo` y
+`uq_ubicaciones_almacen_qr`, ambos por almacén. **Ejecutar en producción:**
+
+```bash
+cd /srv/smartwarehouse/backend && sudo -u smartwarehouse .venv/bin/python scripts/alter_multialmacen.py
+```
+
+Es idempotente y además imprime los índices resultantes para verificarlo.
+
+### 2. `get_by_codigo` no filtraba por almacén
+
+Consecuencia directa de lo anterior: al previsualizar un almacén nuevo vacío
+decía que **las 87 ubicaciones ya existían** —las del almacén 1—. Además era
+una fuga entre inquilinos. Ahora está acotado.
+
+### 3. Vaciar un campo numérico borraba tu configuración
+
+En el frontend, `type="number"` dispara `input` con `""` al borrar para
+reescribir. `Math.trunc("")` es `NaN`, y convertir `NaN` en el mínimo borraba
+los pasillos que el usuario ya había configurado. Se perdían datos por una
+acción tan normal como seleccionar todo y teclear.
+
+Ahora un campo vacío significa «no me lo cambies», no «ponle 1».
+
+### 4. El `Set` y el array de fuera de servicio eran dos verdades
+
+El store guardaba los estantes marcados en un `Set` aparte con la clave
+`"2:D"` y también dentro de `PasilloConfig`. Al reducir los estantes de un
+pasillo, el `Set` conservaba letras que ya no existían. Ahora solo hay una
+fuente: el array del pasillo.
+
+---
+
+## Verificación
+
+Caso de prueba: 4 pasillos · 8 estantes (P3 con 5) · 3 niveles · P2-D fuera de
+servicio → **87 ubicaciones**, 84 en servicio y 3 fuera.
+
+```
+almacén nuevo: 87 creadas, 0 omitidas
+               P2-D-01, P2-D-02, P2-D-03 marcadas inactivas
+repetir:       todas ya existen → mensaje claro, no duplica
+añadir P5:     12 creadas, 87 omitidas
+aislamiento:    almacén 1 sigue con sus 150
+                el mismo QR resuelve a un id distinto en cada almacén
+permisos:       un Almacenero recibe 403 en /configuracion/generar
+```
+
 ## Resumen de desviaciones
 
 | # | Decisión | Plan | Realidad | Impacto |

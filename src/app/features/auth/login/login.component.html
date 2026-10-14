@@ -115,6 +115,32 @@
         />
       </form>
 
+      <!-- Alta de almacén nuevo -->
+      <div class="mt-7 rounded-lg border border-border bg-surface-sunken p-4">
+        <div class="flex items-start gap-3">
+          <span
+            class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+          >
+            <sw-icon name="paquete" [size]="17" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <h2 class="text-sm font-semibold text-foreground">¿Empiezas de cero?</h2>
+            <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Crea tu almacén y tu cuenta de administrador en un paso, y define
+              cuántos pasillos y estantes tienes. Generamos las ubicaciones con
+              su código y su QR.
+            </p>
+            <a
+              routerLink="/configuracion-inicial"
+              class="mt-2.5 inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:text-accent-hover"
+            >
+              Crear almacén nuevo
+              <sw-icon name="flecha-derecha" [size]="15" />
+            </a>
+          </div>
+        </div>
+      </div>
+
       <!-- Acceso rápido de demostración -->
       <div class="mt-8 border-t border-border pt-5">
         <button

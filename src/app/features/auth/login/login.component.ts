@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormField, email, form, minLength, required, submit } from '@angular/forms/signals';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { ApiError } from '../../../core/models/error.model';
 import { USUARIOS_DEMO } from '../../../core/models/rol.model';
@@ -28,7 +28,7 @@ type LoginModel = { email: string; password: string };
   selector: 'sw-login',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login.component.html',
-  imports: [ButtonComponent, IconComponent, FormField],
+  imports: [ButtonComponent, IconComponent, FormField, RouterLink],
 })
 export class LoginComponent {
   private readonly auth = inject(AuthService);

@@ -1,0 +1,544 @@
+<!--
+  Asistente de alta y configuración.
+
+  El indicador de progreso es texto real ("Paso 2 de 5"), no solo una barra de
+  color: quien navega con lector de pantalla necesita oír por dónde va, y un
+  usuario con Baja visión no distingue dos barras azules parecidas.
+-->
+<div class="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+  <!-- Encabezado -->
+  <header class="mb-8">
+    <button
+      type="button"
+      (click)="volver()"
+      class="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <sw-icon name="flecha-izquierda" [size]="14" />
+      Volver al panel
+    </button>
+
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground">
+      Configura tu almacén
+    </h1>
+    <p class="mt-1.5 text-sm text-muted-foreground">
+      Dinos cómo es tu almacén y generamos las ubicaciones con su código y su QR.
+      Puedes dejar esto para más tarde y configurarlo desde el panel.
+    </p>
+  </header>
+
+  <!-- Progreso -->
+  <nav aria-label="Pasos del alta" class="mb-8">
+    <ol class="flex items-center gap-1.5">
+      @for (p of pasos(); track p.id; let i = $index) {
+        <li class="flex items-center gap-1.5">
+          <button
+            type="button"
+            (click)="irA(p.id)"
+            [disabled]="i > indicePaso()"
+            [attr.aria-current]="i === indicePaso() ? 'step' : null"
+            class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-default"
+            [class.bg-primary]="i === indicePaso()"
+            [class.text-on-primary]="i === indicePaso()"
+            [class.bg-surface-sunken]="i !== indicePaso()"
+            [class.text-muted-foreground]="i !== indicePaso()"
+          >
+            <span
+              class="flex size-4 items-center justify-center rounded-full text-[10px] font-semibold"
+              [class.bg-on-primary]="i === indicePaso()"
+              [class.text-primary]="i === indicePaso()"
+              [class.bg-border]="i !== indicePaso()"
+            >
+              @if (i < indicePaso()) {
+                <sw-icon name="check" [size]="10" />
+              } @else {
+                {{ i + 1 }}
+              }
+            </span>
+            <span class="hidden sm:inline">{{ p.titulo }}</span>
+          </button>
+          @if (i < pasos().length - 1) {
+            <span class="h-px w-3 bg-border" aria-hidden="true"></span>
+          }
+        </li>
+      }
+    </ol>
+    <p class="mt-2.5 text-xs text-subtle-foreground">Paso {{ pasoTexto() }}</p>
+  </nav>
+
+  @if (errorServidor(); as mensaje) {
+    <div
+      role="alert"
+      class="mb-6 flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+    >
+      <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+      <span>{{ mensaje }}</span>
+    </div>
+  }
+
+  <!-- ═══════════════ PASO 1 · ALMACÉN Y ADMINISTRADOR ═══════════════ -->
+  @if (paso() === 'almacen' && soloConfigurar()) {
+    <!--
+      Ampliar un almacén que ya existe: no se pregunta nada, solo se explica
+      qué va a pasar. Preguntar el nombre del almacén o la contraseña aquí
+      sería pedir datos que ya están guardados y que el usuario no puede ver.
+    -->
+    <section class="sw-card p-6">
+      <div class="flex items-start gap-3">
+        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <sw-icon name="inventario" [size]="19" />
+        </span>
+        <div>
+          <h2 class="text-sm font-semibold text-foreground">
+            Añadir o cambiar ubicaciones de tu almacén
+          </h2>
+          <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+            Describe cómo es tu almacén y se generarán las ubicaciones que falten,
+            cada una con su código y su QR. Las que ya existen se dejan como
+            están: no se borra ni se toca ningún producto.
+          </p>
+          <p class="mt-3 text-xs text-subtle-foreground">
+            Los estantes y niveles que ya tenías se conservan, aunque bajes el
+            número en los pasos siguientes. Si quieres reducirlos de verdad,
+            desactiva los sobrantes desde el listado de ubicaciones.
+          </p>
+        </div>
+      </div>
+    </section>
+  }
+
+  @if (paso() === 'almacen' && !soloConfigurar()) {
+    <section class="space-y-6">
+      <div class="sw-card p-5">
+        <h2 class="text-sm font-semibold text-foreground">Tu almacén</h2>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Los estantes y pasillos los definimos en los pasos siguientes.
+        </p>
+
+        <div class="mt-4 space-y-4">
+          <div>
+            <label for="almacen-nombre" class="mb-1.5 block text-sm font-medium text-foreground">
+              Nombre del almacén <span class="text-danger">*</span>
+            </label>
+            <input
+              id="almacen-nombre"
+              type="text"
+              autocomplete="organization"
+              class="sw-input"
+              placeholder="Logística Norte"
+              [value]="store.almacenNombre()"
+              (input)="store.almacenNombre.set($any($event.target).value)"
+            />
+          </div>
+
+          <div>
+            <label for="almacen-direccion" class="mb-1.5 block text-sm font-medium text-foreground">
+              Dirección <span class="font-normal text-muted-foreground">(opcional)</span>
+            </label>
+            <input
+              id="almacen-direccion"
+              type="text"
+              autocomplete="street-address"
+              class="sw-input"
+              placeholder="Calle Mayor 1, Madrid"
+              [value]="store.almacenDireccion()"
+              (input)="store.almacenDireccion.set($any($event.target).value)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="sw-card p-5">
+        <h2 class="text-sm font-semibold text-foreground">Tu cuenta</h2>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Serás el administrador: podrás crear a los demás, cambiar los estantes y
+          generar códigos.
+        </p>
+
+        <div class="mt-4 space-y-4">
+          <div>
+            <label for="usuario-nombre" class="mb-1.5 block text-sm font-medium text-foreground">
+              Nombre y apellidos <span class="text-danger">*</span>
+            </label>
+            <input
+              id="usuario-nombre"
+              type="text"
+              autocomplete="name"
+              class="sw-input"
+              placeholder="Rita Gómez"
+              [value]="store.usuarioNombre()"
+              (input)="store.usuarioNombre.set($any($event.target).value)"
+            />
+          </div>
+
+          <div>
+            <label for="usuario-email" class="mb-1.5 block text-sm font-medium text-foreground">
+              Correo electrónico <span class="text-danger">*</span>
+            </label>
+            <input
+              id="usuario-email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              class="sw-input"
+              placeholder="rita@tuempresa.es"
+              [value]="store.usuarioEmail()"
+              (input)="store.usuarioEmail.set($any($event.target).value)"
+            />
+          </div>
+
+          <div>
+            <label for="usuario-password" class="mb-1.5 block text-sm font-medium text-foreground">
+              Contraseña <span class="text-danger">*</span>
+            </label>
+            <div class="relative">
+              <input
+                id="usuario-password"
+                type="password"
+                autocomplete="new-password"
+                class="sw-input pr-10"
+                placeholder="••••••••"
+                [value]="store.usuarioPassword()"
+                (input)="store.usuarioPassword.set($any($event.target).value)"
+              />
+              <sw-icon
+                name="contrasena"
+                [size]="16"
+                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
+              />
+            </div>
+
+            <!-- Las reglas se muestran de entrada, no cuando ya fallan: saber
+                 de antemano qué se exige evita el error y el reintento. -->
+            <ul class="mt-2.5 space-y-1">
+              @for (regla of reglasPassword(); track regla.texto) {
+                <li class="flex items-center gap-1.5 text-xs">
+                  <sw-icon
+                    [name]="regla.ok ? 'check' : 'info'"
+                    [size]="12"
+                    [class.text-success]="regla.ok"
+                    [class.text-subtle-foreground]="!regla.ok"
+                  />
+                  <span [class.text-success]="regla.ok" [class.text-muted-foreground]="!regla.ok">
+                    {{ regla.texto }}
+                  </span>
+                </li>
+              }
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  }
+
+  <!-- ═════════════════════ PASO 2 · PASILLOS ════════════════════════ -->
+  @if (paso() === 'pasillos') {
+    <section class="space-y-6">
+      <div class="sw-card p-5">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 class="text-sm font-semibold text-foreground">¿Cuántos pasillos tiene?</h2>
+            <p class="mt-1 text-xs text-muted-foreground">
+              Los numeramos del 1 en adelante: P1, P2, P3…
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="num-pasillos" class="text-sm font-medium text-foreground">
+              Número de pasillos
+            </label>
+            <input
+              id="num-pasillos"
+              type="number"
+              inputmode="numeric"
+              [min]="1"
+              [max]="maxPasillos"
+              class="sw-input w-20 text-center"
+              [value]="store.numPasillos()"
+              (input)="store.ajustarPasillos(+$any($event.target).value)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="sw-card divide-y divide-border">
+        @for (p of store.pasillos(); track $index; let i = $index) {
+          <div class="flex flex-wrap items-center gap-4 p-4">
+            <span
+              class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary"
+            >
+              P{{ p.nombre }}
+            </span>
+            <div class="flex-1">
+              <label [for]="'estantes-' + i" class="block text-sm font-medium text-foreground">
+                Estantes en este pasillo
+              </label>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                De A a {{ letras[p.estantes - 1] || 'A' }}
+              </p>
+            </div>
+            <input
+              [id]="'estantes-' + i"
+              type="number"
+              inputmode="numeric"
+              [min]="1"
+              [max]="maxEstantes"
+              [attr.aria-label]="'Estantes en el pasillo ' + p.nombre"
+              class="sw-input w-20 text-center"
+              [value]="p.estantes"
+              (input)="store.cambiarEstantes(i, +$any($event.target).value)"
+            />
+          </div>
+        } @empty {
+          <p class="p-6 text-center text-sm text-muted-foreground">
+            Indica al menos un pasillo para continuar.
+          </p>
+        }
+      </div>
+
+      <p class="flex items-start gap-2 text-xs text-muted-foreground">
+        <sw-icon name="info" [size]="14" class="mt-px shrink-0 text-subtle-foreground" />
+        <span>
+          El máximo son {{ maxEstantes }} estantes por pasillo porque cada estante se
+          identifica con una sola letra (A, B, C…) en el código del QR.
+        </span>
+      </p>
+    </section>
+  }
+
+  <!-- ═════════════════════ PASO 3 · NIVELES ════════════════════════ -->
+  @if (paso() === 'niveles') {
+    <section class="space-y-6">
+      <div class="sw-card p-5">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 class="text-sm font-semibold text-foreground">¿Cuántos niveles tiene cada estante?</h2>
+            <p class="mt-1 text-xs text-muted-foreground">
+              El suelo es el nivel 1. Si un estante tiene 3 alturas, son 3 niveles.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="num-niveles" class="text-sm font-medium text-foreground">
+              Número de niveles
+            </label>
+            <input
+              id="num-niveles"
+              type="number"
+              inputmode="numeric"
+              [min]="1"
+              [max]="maxNiveles"
+              class="sw-input w-20 text-center"
+              [value]="store.numNiveles()"
+              (input)="store.numNiveles.set(+$any($event.target).value)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="sw-card p-5">
+        <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Así quedará un estante del pasillo P1
+        </h3>
+        <ul class="mt-3 flex flex-wrap gap-2">
+          @for (estante of letras.slice(0, (store.pasillos()[0]?.estantes ?? 1)); track estante) {
+            <li>
+              <div class="rounded-lg border border-border bg-surface-sunken px-3 py-2 text-center">
+                <p class="text-xs font-semibold text-foreground">{{ estante }}</p>
+                @for (n of store.niveles(); track n.nombre) {
+                  <p class="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                    P1-{{ estante }}-{{ n.nombre.padStart(2, '0') }}
+                  </p>
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    </section>
+  }
+
+  <!-- ═══════════ PASO 4 · ESTANTES FUERA DE SERVICIO ═══════════════ -->
+  @if (paso() === 'fuera') {
+    <section class="space-y-6">
+      <div class="sw-card p-5">
+        <h2 class="text-sm font-semibold text-foreground">Estantes fuera de servicio</h2>
+        <p class="mt-1 text-xs text-muted-foreground">
+          ¿Hay algún estante obstruido, en reforma o simplemente ocupado? Se crearán
+          igualmente, pero marcados para que no admitan stock. Pulsa para activar
+          o desactivar.
+        </p>
+      </div>
+
+      @for (p of store.pasillos(); track $index; let i = $index) {
+        <div class="sw-card p-5">
+          <h3 class="mb-3 text-sm font-semibold text-foreground">Pasillo P{{ p.nombre }}</h3>
+          <div class="flex flex-wrap gap-2">
+            @for (letra of letras.slice(0, p.estantes); track letra) {
+              <button
+                type="button"
+                (click)="store.alternarFueraDeServicio(i, letra)"
+                [disabled]="cargando()"
+                [attr.aria-pressed]="store.estaFuera(i, letra)"
+                class="flex size-10 items-center justify-center rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50"
+                [class.border-danger]="store.estaFuera(i, letra)"
+                [class.bg-danger-surface]="store.estaFuera(i, letra)"
+                [class.text-danger]="store.estaFuera(i, letra)"
+                [class.border-border]="!store.estaFuera(i, letra)"
+                [class.bg-surface]="!store.estaFuera(i, letra)"
+                [class.text-foreground]="!store.estaFuera(i, letra)"
+                [attr.title]="
+                  store.estaFuera(i, letra)
+                    ? 'Pasillo ' + p.nombre + ', estante ' + letra + ': fuera de servicio'
+                    : 'Pasillo ' + p.nombre + ', estante ' + letra + ': en servicio'
+                "
+              >
+                {{ letra }}
+              </button>
+            }
+          </div>
+          @if (p.estantes_fuera_servicio.length > 0) {
+            <p class="mt-3 flex items-center gap-1.5 text-xs text-danger">
+              <sw-icon name="alerta" [size]="13" />
+              Fuera de servicio: {{ p.estantes_fuera_servicio.join(', ') }}
+            </p>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  <!-- ═══════════════════ PASO 5 · CONFIRMAR ═════════════════════════ -->
+  @if (paso() === 'confirmar') {
+    <section class="space-y-6">
+      @if (cargando() && !preview()) {
+        <div class="sw-card flex items-center justify-center gap-2.5 p-10 text-sm text-muted-foreground">
+          <sw-icon name="cargando" [size]="18" class="animate-spin" />
+          Calculando las ubicaciones…
+        </div>
+      } @else if (preview(); as p) {
+        <div class="sw-card p-5">
+          <h2 class="text-sm font-semibold text-foreground">
+            Esto es lo que se va a crear
+          </h2>
+
+          <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <dt class="text-xs text-muted-foreground">Ubicaciones</dt>
+              <dd class="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">{{ p.total }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-muted-foreground">En servicio</dt>
+              <dd class="mt-0.5 text-2xl font-semibold tabular-nums text-success">{{ p.activas }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-muted-foreground">Fuera de servicio</dt>
+              <dd class="mt-0.5 text-2xl font-semibold tabular-nums text-warning">
+                {{ p.fuera_servicio }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-muted-foreground">Ya existentes</dt>
+              <dd class="mt-0.5 text-2xl font-semibold tabular-nums text-muted-foreground">
+                {{ p.ya_existentes }}
+              </dd>
+            </div>
+          </dl>
+
+          <table class="mt-5 w-full text-sm">
+            <caption class="sr-only">Resumen por pasillo</caption>
+            <thead>
+              <tr class="border-b border-border text-left text-xs text-muted-foreground">
+                <th scope="col" class="py-2 font-medium">Pasillo</th>
+                <th scope="col" class="py-2 font-medium">Estantes</th>
+                <th scope="col" class="py-2 font-medium">Fuera de servicio</th>
+                <th scope="col" class="py-2 text-right font-medium">Ubicaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (fila of store.filasPorPasillo(); track fila.indice) {
+                <tr class="border-b border-border last:border-0">
+                  <td class="py-2.5 font-medium text-foreground">{{ fila.nombre }}</td>
+                  <td class="py-2.5 tabular-nums text-muted-foreground">{{ fila.estantes }}</td>
+                  <td class="py-2.5 tabular-nums text-warning">
+                    {{ fila.fuera > 0 ? fila.fuera : '—' }}
+                  </td>
+                  <td class="py-2.5 text-right font-medium tabular-nums text-foreground">
+                    {{ fila.total }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (p.advertencias.length > 0) {
+          <div class="rounded-lg border border-warning/40 bg-warning-surface p-4">
+            <ul class="space-y-2">
+              @for (aviso of p.advertencias; track aviso) {
+                <li class="flex items-start gap-2.5 text-xs text-warning">
+                  <sw-icon name="alerta" [size]="15" class="mt-px shrink-0" />
+                  <span>{{ aviso }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
+        <div class="sw-card p-5">
+          <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Primeros códigos generados
+          </h3>
+          <ul class="mt-3 grid gap-1.5 sm:grid-cols-2">
+            @for (u of p.muestra; track u.codigo_ubicacion) {
+              <li class="flex items-center justify-between gap-3 rounded-md bg-surface-sunken px-3 py-1.5">
+                <span class="font-mono text-xs text-foreground">{{ u.codigo_ubicacion }}</span>
+                @if (!u.activo) {
+                  <span class="text-[11px] text-warning">fuera de servicio</span>
+                }
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- ═════════════════════ Navegación ═══════════════════════════════ -->
+  <nav class="mt-8 flex items-center justify-between gap-3 border-t border-border pt-6">
+    @if (indicePaso() > 0) {
+      <sw-btn
+        type="button"
+        label="Atrás"
+        variant="secondary"
+        icon="flecha-izquierda"
+        (click)="atras()"
+        [disabled]="cargando()"
+      />
+    } @else {
+      <span></span>
+    }
+
+    @if (paso() === 'confirmar') {
+      <sw-btn
+        type="button"
+        [label]="cargando() ? 'Creando…' : (soloConfigurar() ? 'Generar ubicaciones' : 'Crear almacén y ubicaciones')"
+        [loading]="cargando()"
+        [disabled]="cargando() || !preview() || (preview()?.total ?? 0) === 0"
+        (click)="crearAlmacenYGenerar()"
+      />
+    } @else {
+      <sw-btn
+        type="button"
+        label="Continuar"
+        icon="flecha-derecha"
+        (click)="siguiente()"
+        [disabled]="!puedeAvanzar()"
+      />
+    }
+  </nav>
+
+  <p class="mt-4 text-center text-xs text-subtle-foreground">
+    ¿Prefieres configurarlo más adelante?
+    <button type="button" (click)="saltar()" class="font-medium text-primary underline underline-offset-2 hover:text-accent-hover">
+      Saltar y entrar al panel
+    </button>
+  </p>
+</div>

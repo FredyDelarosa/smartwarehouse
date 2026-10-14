@@ -1,6 +1,6 @@
 import { type Routes } from '@angular/router';
 
-import { authGuard, guestGuard } from './core/guards/auth.guard';
+import { authGuard, guestGuard, roleGuard } from './core/guards/auth.guard';
 
 /**
  * Rutas de la aplicación.
@@ -15,6 +15,18 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/auth/login/login.component').then((m) => m.LoginComponent),
     title: 'Iniciar sesión · SmartWarehouse',
+  },
+  {
+    // Alta de almacén con su administrador + definición del layout.
+    // Va FUERA del layout autenticado a propósito: durante todo el proceso el
+    // usuario aún no tiene sesión (se crea al final), así que cualquier
+    // `authGuard` lo expulsaría al login a mitad.
+    path: 'configuracion-inicial',
+    canActivate: [guestGuard],
+    loadComponent: () =>
+      import('./features/configuracion/wizard/wizard.component').then((m) => m.WizardComponent),
+    data: { modo: 'alta' },
+    title: 'Configurar almacén · SmartWarehouse',
   },
   {
     path: 'mi-cuenta/cambiar-contrasena',
@@ -33,6 +45,18 @@ export const routes: Routes = [
       import('./layout/main-layout/main-layout.component').then((m) => m.MainLayoutComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+
+      {
+        path: 'almacen/configuracion',
+        canActivate: [roleGuard],
+        loadComponent: () =>
+          import('./features/configuracion/wizard/wizard.component').then((m) => m.WizardComponent),
+        // `modo` lo lee el componente para saber si debe pedir el alta del
+        // almacén (invitado) o solo configurar el que ya existe.
+        // `roles` lo consume `roleGuard`.
+        data: { roles: ['Administrador'], modo: 'configurar' },
+        title: 'Configurar almacén · SmartWarehouse',
+      },
 
       {
         path: 'dashboard',
