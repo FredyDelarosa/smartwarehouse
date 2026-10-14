@@ -20,8 +20,15 @@ export type Ubicacion = {
   created_at: string | null;
 };
 
+/**
+ * Alta y edición de una ubicación.
+ *
+ * Sin `almacen_id`, a propósito: el almacén lo decide el servidor a partir de
+ * la sesión. Si el cliente lo pudiera mandar, un usuario escribiría dentro del
+ * almacén de otro indicando su id — que es exactamente lo que pasaba antes de
+ * quitarlo del DTO del backend y de este tipo.
+ */
 export type UbicacionCreate = {
-  almacen_id: number;
   pasillo: string;
   estante: string;
   nivel: string;

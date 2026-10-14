@@ -453,7 +453,7 @@ function createUbicacion(body: Record<string, unknown> | null) {
 
   const nueva = {
     id: Math.max(...MOCK_UBICACIONES.map((u) => u.id)) + 1,
-    almacen_id: Number(body?.['almacen_id'] ?? 1),
+    almacen_id: 1,
     pasillo,
     estante,
     nivel,

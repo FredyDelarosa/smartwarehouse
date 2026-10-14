@@ -7,7 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { FormField, form, min, required, submit } from '@angular/forms/signals';
+import { FormField, form, required, submit } from '@angular/forms/signals';
 import { Router } from '@angular/router';
 
 import type { Ubicacion } from '../../../core/models/ubicacion.model';
@@ -19,8 +19,14 @@ import { IconComponent } from '../../../shared/components/icon.component';
 import { QrCodeComponent } from '../../../shared/components/qr-code.component';
 import { UbicacionesService } from '../ubicaciones.service';
 
+/**
+ * Sin `almacen_id`: el almacén lo decide la sesión, no el formulario.
+ *
+ * Estaba aquí con un `1` fijo porque el backend lo exigía en el cuerpo. Con un
+ * solo almacén era inofensivo, pero en cuanto haya más de uno abría la
+ * escritura cruzada: mandar el id de otro creaba la ubicación en su almacén.
+ */
 type UbicacionFormModel = {
-  almacen_id: number;
   pasillo: string;
   estante: string;
   nivel: string;
@@ -32,7 +38,6 @@ type UbicacionFormModel = {
 };
 
 const MODELO_VACIO: UbicacionFormModel = {
-  almacen_id: 1,
   pasillo: '',
   estante: '',
   nivel: '',
@@ -94,7 +99,6 @@ protected readonly idNumero = computed<number | null>(() => {
     required(f.estante, { message: 'Indica el estante (ej. B).' });
     required(f.nivel, { message: 'Indica el nivel (ej. 02).' });
     required(f.codigo_ubicacion, { message: 'Se genera a partir del pasillo, estante y nivel.' });
-    min(f.almacen_id, 1, { message: 'El almacén debe ser 1 o superior.' });
   });
 
   protected readonly currentField = this.form.pasillo;
@@ -150,7 +154,6 @@ protected readonly idNumero = computed<number | null>(() => {
     this.svc.obtener(id).subscribe({
       next: (u: Ubicacion) => {
         this.model.set({
-          almacen_id: u.almacen_id,
           pasillo: u.pasillo,
           estante: u.estante,
           nivel: u.nivel,
@@ -184,7 +187,6 @@ protected readonly idNumero = computed<number | null>(() => {
     const codigo = this.codigoCalculado();
 
     const payload = {
-      almacen_id: Number(m.almacen_id),
       pasillo: normalizar(m.pasillo),
       estante: normalizar(m.estante),
       nivel: normalizar(m.nivel).padStart(2, '0'),
