@@ -1,4 +1,48 @@
+import { Observable, map, of, switchMap } from 'rxjs';
+
 import type { ProductoEnUbicacion, UbicacionStock } from '../../../core/models/ubicacion.model';
+
+/** Máximo `limit` que aceptan los endpoints paginados del backend. */
+export const LIMITE_PAGINA = 500;
+
+/**
+ * Encadena todas las páginas de un listado paginado.
+ *
+ * ## Por qué esto vive aquí y no en el componente
+ *
+ * Porque la primera versión de la paginación estaba en el componente, con
+ * `expand`, y **falló de una forma que el componente ocultaba**: `expand`
+ * vuelve a emitir el valor de origen y luego lo expandido, así que para
+ * marcar el final había que meter un objeto `{ fin, pagina }` en un flujo que
+ * ya llevaba arrays. La comparación se hacía sobre el valor equivocado y la
+ * pantalla decía «no se pudo cargar el contenido» con los dos endpoints
+ * respondiendo 200.
+ *
+ * ## Por qué el tope de 500
+ *
+ * El backend rechaza `limit > 500` con un 422. Y pedir solo 500 en un almacén
+ * de 600 ubicaciones daría una lista incompleta **sin avisar**, que es lo más
+ * peligroso que puede pasar en un documento que alguien cuelga en la nave y se
+ * fía de él. Por eso se piden todas las páginas.
+ *
+ * Se para cuando una página viene con menos filas que el límite: eso significa
+ * que ya no hay más. Con exactamente 500 en la última se hace una petición de
+ * más que vuelve vacía; es el precio de no preguntar el total antes.
+ */
+export function paginarTodo<T>(
+  unaPagina: (skip: number, limit: number) => Observable<T[]>,
+  limite = LIMITE_PAGINA,
+): Observable<T[]> {
+  return unaPagina(0, limite).pipe(
+    switchMap((primera) =>
+      primera.length < limite
+        ? of(primera)
+        : paginarTodo<T>((skip) => unaPagina(skip + limite, limite), limite).pipe(
+            map((resto) => [...primera, ...resto]),
+          ),
+    ),
+  );
+}
 
 /**
  * Agrupación de las listas de estante (PET-4).

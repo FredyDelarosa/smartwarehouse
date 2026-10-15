@@ -1,7 +1,8 @@
+import { firstValueFrom, of } from 'rxjs';
 import { describe, expect, it } from 'vitest';
 
 import type { UbicacionStock } from '../../../core/models/ubicacion.model';
-import { agruparPorPasillo } from './listas.model';
+import { agruparPorPasillo, paginarTodo } from './listas.model';
 
 /**
  * Agrupación de las listas de ubicación.
@@ -118,5 +119,69 @@ describe('agruparPorPasillo', () => {
     const stock = [ubic('P1', 'A', '1', [['Z009', 'Zeta', 1], ['A001', 'Alfa', 1]])];
     const productos = agruparPorPasillo(stock)[0]!.estantes[0]!.niveles[0]!.productos;
     expect(productos.map((p) => p.codigo)).toEqual(['A001', 'Z009']);
+  });
+});
+
+describe('paginarTodo', () => {
+  /**
+   * Regresión: la pantalla decía «no se pudo cargar el contenido del almacén»
+   * con los dos endpoints respondiendo 200.
+   *
+   * La paginación usaba `expand` marcando el final con un objeto
+   * `{ fin, pagina }`. `expand` vuelve a emitir el valor de origen y luego lo
+   * expandido, así que el flujo mezclaba un `T[]` con un objeto y la
+   * comparación se hacía sobre el valor equivocado. Aquí la lógica es una
+   * función pura, se prueba sin montar nada y no puede volver a esconderse
+   * detrás del componente.
+   */
+
+  it('devuelve una sola página si caben todas', async () => {
+    const salida = await firstValueFrom(
+      paginarTodo<number>((skip, limite) => of([1, 2, 3].slice(skip, skip + limite)), 500),
+    );
+    expect(salida).toEqual([1, 2, 3]);
+  });
+
+  it('encadena páginas hasta que una viene incompleta', async () => {
+    const TOTAL = 1200;
+    const LIMITE = 500;
+    const pedidas: number[] = [];
+
+    const salida = await firstValueFrom(
+      paginarTodo<number>((skip, limite) => {
+        pedidas.push(skip);
+        return of(
+          Array.from({ length: Math.max(0, Math.min(limite, TOTAL - skip)) }, (_, i) => skip + i),
+        );
+      }, LIMITE),
+    );
+
+    // 1200 = 500 + 500 + 200. La tercera página ya viene incompleta, que es
+    // la señal de que no hay más, así que son tres peticiones y no cuatro.
+    expect(salida.length).toBe(TOTAL);
+    expect(salida[0]).toBe(0);
+    expect(salida[1199]).toBe(1199);
+    expect(pedidas).toEqual([0, 500, 1000]);
+  });
+
+  it('una lista vacía devuelve vacío y no se queda pidiendo páginas', async () => {
+    let llamadas = 0;
+    const salida = await firstValueFrom(
+      paginarTodo<number>(() => { llamadas += 1; return of([]); }, 500),
+    );
+    expect(salida).toEqual([]);
+    expect(llamadas).toBe(1);
+  });
+
+  it('el total no se pierde aunque caiga justo en el límite', async () => {
+    // Exactamente 500: la primera página «llena», así que se pide la segunda.
+    // Si se parara por `length < limite` malplanteado, se perderían esas 500.
+    const salida = await firstValueFrom(
+      paginarTodo<number>((skip, limite) => of(
+        Array.from({ length: skip === 0 ? limite : 0 }, (_, i) => skip + i),
+      ), 500),
+    );
+    expect(salida.length).toBe(500);
+    expect(salida[499]).toBe(499);
   });
 });

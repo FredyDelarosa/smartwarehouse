@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Observable, catchError, expand, forkJoin, map, of, reduce, takeWhile } from 'rxjs';
+import { Observable, catchError, forkJoin, of } from 'rxjs';
 
 import type { ResumenAlmacen } from '../../../core/models/configuracion.model';
 import type { Ubicacion, UbicacionStock } from '../../../core/models/ubicacion.model';
@@ -8,7 +8,12 @@ import { ApiService } from '../../../core/services/api.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { ButtonComponent } from '../../../shared/components/button.component';
 import { IconComponent } from '../../../shared/components/icon.component';
-import { agruparPorPasillo, estantesDe, type PasilloResumen } from './listas.model';
+import {
+  agruparPorPasillo,
+  estantesDe,
+  paginarTodo,
+  type PasilloResumen,
+} from './listas.model';
 
 type Alcance = 'pasillo' | 'estante';
 
@@ -116,36 +121,18 @@ export class ListasComponent {
   }
 
   /**
-   * Trae TODAS las páginas de un listado paginado.
+   * Todas las páginas de un listado, en una sola respuesta.
    *
-   * No se pide `limit=1000`: el backend acepta como máximo 500 y devuelve 422
-   * con más. Y pedir solo 500 sin más sería peor que un error — en un almacén
-   * con 600 ubicaciones la lista saldría incompleta y **no lo diría**, que es
-   * la forma más peligrosa de equivocarse en un documento que alguien cuelga
-   * en la nave y se fía de él.
-   *
-   * Se para cuando una página viene con menos filas que el límite: eso
-   * significa que ya no hay más. Con exactamente 500 en la última página se
-   * hace una petición de más que devuelve vacía; es el precio de no tener que
-   * preguntar el total antes.
+   * La lógica está en `paginarTodo` y no aquí a propósito: dentro del
+   * componente quedaba enterrada y su fallo —`expand` mezclando arrays y
+   * centinelas— se veía como un error de carga con la API respondiendo 200.
    */
   private todasLasPaginas<T>(
     ruta: string,
     params: Record<string, string | number | boolean> = {},
-    skip = 0,
-    acumuladas: T[] = [],
   ): Observable<T[]> {
-    const LIMITE = 500;
-    return this.api.get<T[]>(ruta, { ...params, skip, limit: LIMITE }).pipe(
-      expand((pagina) =>
-        pagina.length < LIMITE
-          ? of({ fin: true as const, pagina })
-          : this.api
-              .get<T[]>(ruta, { ...params, skip: skip + LIMITE, limit: LIMITE })
-              .pipe(map((p) => ({ fin: false as const, pagina: p }))),
-      ),
-      takeWhile((p) => !p.fin),
-      reduce((todas: T[], p) => [...todas, ...p.pagina], acumuladas),
+    return paginarTodo<T>((skip, limit) =>
+      this.api.get<T[]>(ruta, { ...params, skip, limit }),
     );
   }
 
