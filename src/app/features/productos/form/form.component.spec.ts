@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ApiService } from '../../../core/services/api.service';
@@ -29,6 +29,9 @@ const CATEGORIAS = [
   // Categoría nueva, todavía sin prefijo asignado en la convención.
   { id: 3, nombre: 'Ferretería', descripcion: null, activo: true },
 ];
+
+/** Petición de catálogo que el test resuelve cuando quiere. */
+const catalogoPENDIENTE = new Subject<unknown>();
 
 const PRODUCTOS_EXISTENTES = [
   { id: 1, codigo: 'TT001', nombre: 'Tornillo de acero' },
@@ -108,49 +111,60 @@ describe('ProductoFormComponent · generación automática del código', () => {
     expect(componente.model().codigo).toBe('TA002');
   });
 
-  it('el campo se rellena aunque el catálogo llegue tarde', () => {
-    // ESTA es la carrera del bug. Con el catálogo todavía sin llegar no se
-    // puede saber qué códigos están ocupados, así que la propuesta es null y
-    // el campo sigue vacío. Lo que no puede pasar es que eso se quede así:
-    // cuando la lista llegue, tiene que rellenarse solo.
+  it('espera a que el catálogo termine y entonces rellena el campo', async () => {
+    // La carrera de verdad: la petición sigue en vuelo, no «vuelve vacía».
+    // Antes este test devolvía `of([])`, que no simula nada: una respuesta
+    // vacía llega igual de rápido y, con la semántica correcta, debe generar
+    // código (se cubre en el bloque de almacén nuevo).
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
-        { provide: ApiService, useValue: crearApiStub({ pendiente: true }) },
+        {
+          provide: ApiService,
+          useValue: {
+            get: (url: string) => {
+              if (url.startsWith('/categorias')) return of(CATEGORIAS);
+              return catalogoPENDIENTE;   // Subject sin resolver todavía
+            },
+            post: () => of(null),
+            patch: () => of(null),
+          },
+        },
         {
           provide: CategoriasService,
           useValue: {
             cargar: () => undefined,
             items: () => CATEGORIAS,
             disponible: () => true,
-            opcionesConFallback: (actual: number | null) =>
+            opcionesConFallback: () =>
               CATEGORIAS.map((c) => ({ value: String(c.id), label: c.nombre })),
           },
         },
       ],
     });
-    const temprano: ComponentFixture<ProductoFormComponent> = TestBed.createComponent(ProductoFormComponent);
-    temprano.componentInstance.codigos.cargar();
-    temprano.detectChanges();
-    temprano.componentInstance.model.set({
-      ...temprano.componentInstance.model(),
+    const f = TestBed.createComponent(ProductoFormComponent);
+    f.componentInstance.codigos.cargar();
+    f.componentInstance.model.set({
+      ...f.componentInstance.model(),
       categoria_id: '1',
       nombre: 'Tornillo',
     });
-    temprano.detectChanges();
+    await f.whenStable();
 
-    // Sin lista, nada que proponer: el campo queda vacío.
-    expect(temprano.componentInstance.codigos.usados().size).toBe(0);
-    expect(temprano.componentInstance.model().codigo).toBe('');
+    // Catálogo sin resolver: no se puede saber qué está ocupado, el campo
+    // sigue vacío.
+    expect(f.componentInstance.codigos.listo()).toBe(false);
+    expect(f.componentInstance.form.codigo().value()).toBe('');
 
-    // Llega la lista (el componente se suscribe a `usados()`).
-    temprano.componentInstance.codigos.reservar('TT001');
-    temprano.componentInstance.codigos.reservar('TT002');
-    temprano.detectChanges();
+    // Llega la lista: el campo se rellena solo, sin tocar nada más.
+    catalogoPENDIENTE.next(PRODUCTOS_EXISTENTES);
+    catalogoPENDIENTE.complete();
+    await f.whenStable();
 
-    expect(temprano.componentInstance.model().codigo).toBe('TT003');
+    expect(f.componentInstance.codigos.listo()).toBe(true);
+    expect(f.componentInstance.form.codigo().value()).toBe('TT002');
   });
 
   it('no pisa un código que la persona escribió a mano', () => {
@@ -210,5 +224,182 @@ describe('ProductoFormComponent · generación automática del código', () => {
     fixture.detectChanges();
 
     expect(componente.pistaCodigo()).toContain('no tiene prefijo');
+  });
+});
+describe('ProductoFormComponent · almacén recién creado, sin productos', () => {
+  /**
+   * Este es el bug que reportó el usuario en su almacén nuevo.
+   *
+   * La generación se bloqueaba con `usados.size === 0`,thinking que si no hay
+   * códigos cargados es que no se puede saber qué está ocupado. Pero un almacén
+   * recién creado NO tiene productos: la lista llega vacía y, por tanto, el
+   * código no se proponía nunca. La leyenda, en cambio, sí caía en un ejemplo
+   * de reserva —un `Set` vacío es «truthy» en JavaScript— así que mostraba
+   * «→ TT001» mientras el campo se quedaba en blanco. Al crear: «el código es
+   * obligatorio».
+   *
+   * Con cero productos hay que proponer el PRIMER código de la serie: es justo
+   * el único caso en el que no hay colisión posible.
+   */
+  async function montarConCatalogo(productos: unknown[]) {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            get: (url: string) => (url.startsWith('/categorias') ? of(CATEGORIAS) : of(productos)),
+            post: () => of(null),
+            patch: () => of(null),
+          },
+        },
+        {
+          provide: CategoriasService,
+          useValue: {
+            cargar: () => undefined,
+            items: () => CATEGORIAS,
+            disponible: () => true,
+            opcionesConFallback: () =>
+              CATEGORIAS.map((c) => ({ value: String(c.id), label: c.nombre })),
+          },
+        },
+      ],
+    });
+    const f = TestBed.createComponent(ProductoFormComponent);
+    f.componentInstance.codigos.cargar();
+    await f.whenStable();
+    return f;
+  }
+
+  it('propone el primer código aunque el catálogo venga vacío', async () => {
+    const f = await montarConCatalogo([]);
+
+    f.componentInstance.model.set({
+      ...f.componentInstance.model(),
+      categoria_id: '1',
+      nombre: 'Tornillo de acero',
+    });
+    await f.whenStable();
+
+    expect(f.componentInstance.codigos.usados().size).toBe(0);
+    expect(f.componentInstance.model().codigo).toBe('TT001');
+    // Lo que ve la persona en el input, no solo el modelo.
+    expect(f.componentInstance.form.codigo().value()).toBe('TT001');
+  });
+
+  it('también propone si la carga de códigos falla', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            get: (url: string) => {
+              if (url.startsWith('/categorias')) return of(CATEGORIAS);
+              // El catálogo de productos falla: el usuario NO puede quedarse
+              // sin poder crear un producto por un fallo de red.
+              return throwError(() => new Error('sin red'));
+            },
+            post: () => of(null),
+            patch: () => of(null),
+          },
+        },
+        {
+          provide: CategoriasService,
+          useValue: {
+            cargar: () => undefined,
+            items: () => CATEGORIAS,
+            disponible: () => true,
+            opcionesConFallback: () =>
+              CATEGORIAS.map((c) => ({ value: String(c.id), label: c.nombre })),
+          },
+        },
+      ],
+    });
+    const f = TestBed.createComponent(ProductoFormComponent);
+    f.componentInstance.codigos.cargar();
+    await f.whenStable();
+
+    f.componentInstance.model.set({
+      ...f.componentInstance.model(),
+      categoria_id: '1',
+      nombre: 'Tornillo de acero',
+    });
+    await f.whenStable();
+
+    expect(f.componentInstance.form.codigo().value()).toBe('TT001');
+  });
+
+  it('la leyenda y el campo dicen lo mismo', async () => {
+    const f = await montarConCatalogo([]);
+    f.componentInstance.model.set({
+      ...f.componentInstance.model(),
+      categoria_id: '1',
+      nombre: 'Tornillo de acero',
+    });
+    await f.whenStable();
+
+    // Si la leyenda enseña un código, el campo tiene que tener ese mismo.
+    const pista = f.componentInstance.pistaCodigo() ?? '';
+    const esperado = f.componentInstance.model().codigo;
+    expect(pista).toContain(esperado);
+  });
+});
+
+describe('ProductoFormComponent · el MODEL y el FORM no pueden divergir', () => {
+  /**
+   * Este es el bug que reportó el usuario: la leyenda enseñaba el código pero
+   * el campo se quedaba vacío y al crear salía «el código es obligatorio».
+   *
+   * Mis tests anteriores miraban `model().codigo`, que SÍ se rellenaba. Lo que
+   * ve la persona es `[formField]="campos.codigo"`, y eso es otra cosa: un
+   * `model.update()` no necesariamente alcanza al campo del formulario. Un
+   * test que mira el modelo da verde con el campo vacío delante.
+   */
+  it('el campo del formulario recibe el código, no solo el modelo', async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            get: (url: string) =>
+              url.startsWith('/categorias') ? of(CATEGORIAS) : of(PRODUCTOS_EXISTENTES),
+            post: () => of(null),
+            patch: () => of(null),
+          },
+        },
+        {
+          provide: CategoriasService,
+          useValue: {
+            cargar: () => undefined,
+            items: () => CATEGORIAS,
+            disponible: () => true,
+            opcionesConFallback: () =>
+              CATEGORIAS.map((c) => ({ value: String(c.id), label: c.nombre })),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const f = TestBed.createComponent(ProductoFormComponent);
+    f.componentInstance.codigos.cargar();
+    await f.whenStable();
+    f.componentInstance.model.set({ ...f.componentInstance.model(), categoria_id: '1' });
+    f.componentInstance.model.update((m: ProductoFormModel) => ({
+      ...m,
+      nombre: 'Tornillo de acero',
+    }));
+    await f.whenStable();
+
+    // Lo que ve la persona en el input.
+    console.log('  model().codigo  =', JSON.stringify(f.componentInstance.model().codigo));
+    console.log('  form.codigo()   =', JSON.stringify(f.componentInstance.form.codigo().value()));
+    expect(f.componentInstance.form.codigo().value()).not.toBe('');
   });
 });

@@ -136,6 +136,17 @@ export class CodigoProductoService {
   /** Códigos ya usados, para no proponer uno que exista. */
   private readonly _codigosUsados = signal<Set<string>>(new Set());
   private readonly _cargados = signal(false);
+  /**
+   * La petición de códigos YA TERMINÓ, salga bien o mal.
+   *
+   * Es imprescindible distinguirla de «hay códigos». Un almacén recién creado
+   * no tiene ningún producto, así que la lista llega **vacía**; si se usara
+   * `usados.size === 0` para decidir que no se puede proponer, en ese almacén
+   * el campo se quedaría vacío para siempre mientras la leyenda —que sí miraba
+   * el conjunto y caía en un ejemplo de reserva— prometería un código. De ahí
+   * el «el código es obligatorio» en un almacén nuevo.
+   */
+  private readonly _listo = signal(false);
 
   /**
    * Códigos ya usados, en solo lectura, para poder reaccionar a su llegada.
@@ -148,6 +159,8 @@ export class CodigoProductoService {
 
   /** `true` cuando ya se intentó la carga (no cuando terminó). */
   readonly cargado = this._cargados.asReadonly();
+  /** `true` cuando la carga ha terminado. Vacía ≠ sin terminar. */
+  readonly listo = this._listo.asReadonly();
 
   /**
    * Carga todos los códigos existentes una sola vez.
@@ -168,9 +181,16 @@ export class CodigoProductoService {
           if (Array.isArray(lista)) {
             this._codigosUsados.set(new Set(lista.map((p) => p.codigo.toUpperCase())));
           }
+          this._listo.set(true);
         },
-        // Sin lista no se propone nada: el usuario escribe el código a mano.
-        error: () => this._codigosUsados.set(new Set()),
+        // Un fallo NO debe dejar el formulario sin código para siempre: se
+        // propone igualmente desde el principio de la serie. Es preferible
+        // arriesgar una colisión —que el servidor avisa con 409— a dejar a
+        // alguien sin poder dar de alta un producto.
+        error: () => {
+          this._codigosUsados.set(new Set());
+          this._listo.set(true);
+        },
       });
   }
 
@@ -198,8 +218,11 @@ export class CodigoProductoService {
     nombreCategoria: string | null | undefined,
     nombreProducto?: string | null,
   ): string | null {
-    // Sin la lista de códigos no se puede saber si el propuesto está libre.
-    if (this._codigosUsados().size === 0) return null;
+    // Hasta que la carga termina no se sabe qué códigos están ocupados: mejor
+    // callar que proponer uno que ya existe. Una vez terminada, da igual que la
+    // lista esté vacía: en un almacén nuevo lo está, y el primer código de la
+    // serie es justo lo que hay que proponer.
+    if (!this._listo()) return null;
     return proponerCodigo(nombreCategoria, nombreProducto, this._codigosUsados());
   }
 
@@ -240,9 +263,14 @@ export class CodigoProductoService {
     // en 1, y una leyenda que enseña un código imposible resta confianza a la
     // que enseña la serie entera.
     const serie = `${formato.prefijo}${inicial}`;
-    const ejemplo = usados
-      ? (proponerCodigo(nombreCategoria, nombreProducto, usados) ?? `${serie}${String(1).padStart(formato.digitos, '0')}`)
-      : `${serie}${String(1).padStart(formato.digitos, '0')}`;
+    const primero = `${serie}${String(1).padStart(formato.digitos, '0')}`;
+    // Solo se busca entre los usados cuando hay alguno: un `Set` vacío es
+    // «truthy» en JavaScript, así que la condición anterior de tres líneas
+    // nunca llegaba al ejemplo de reserva y la leyenda enseñaba un código que
+    // el servicio, por su propio motivo, se negaba a proponer.
+    const ejemplo = usados && usados.size > 0
+      ? (proponerCodigo(nombreCategoria, nombreProducto, usados) ?? primero)
+      : primero;
 
     return `Código automático: ${formato.prefijo} (categoría) + ${inicial} (inicial de tu nombre) + ${formato.digitos} dígitos → ${ejemplo}. Puedes cambiarlo.`;
   }

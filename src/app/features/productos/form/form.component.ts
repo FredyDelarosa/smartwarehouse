@@ -168,10 +168,10 @@ export class ProductoFormComponent {
    */
   private readonly codigoPropuesto = computed<string | null>(() => {
     if (this.esEdicion()) return null;
-    const usados = this.codigos.usados();
-    // Sin la lista no se sabe si el propuesto está libre: mejor callar que
-    // proponer un código que ya existe.
-    if (usados.size === 0) return null;
+    // Se espera a que la carga TERMINE, no a que la lista tenga algo. En un
+    // almacén recién creado la lista llega vacía y ese es precisamente el
+    // caso en el que más hace falta un código: no hay ningún otro.
+    if (!this.codigos.listo()) return null;
     return this.codigos.siguiente(this.nombreCategoriaElegida(), this.model().nombre);
   });
 
