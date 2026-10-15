@@ -62,7 +62,7 @@
           autocomplete="off"
           autocapitalize="characters"
           spellcheck="false"
-          placeholder="T001"
+          placeholder="TT001"
           class="sw-input sw-code"
           [formField]="campos.codigo"
           (input)="onCodigoManual($event)"
@@ -79,13 +79,16 @@
             El código no se puede editar: es la clave con la que se registran los movimientos.
           </p>
         } @else if (pistaCodigo(); as pista) {
+          <!--
+            La leyenda ahora distingue los tres casos: con categoría y
+            prefijo (dice el código exacto que va a salir), sin categoría, y
+            con categoría SIN prefijo (donde no se va a generar nada). Antes
+            el segundo y el tercero caían en el mismo texto, que prometía una
+            generación automática que no ocurría.
+          -->
           <p id="codigo-ayuda" class="mt-1.5 flex items-start gap-1 text-xs text-muted-foreground">
             <sw-icon name="info" [size]="13" class="mt-px shrink-0" />
             {{ pista }}
-          </p>
-        } @else if (!esEdicion()) {
-          <p id="codigo-ayuda" class="mt-1.5 text-xs text-muted-foreground">
-            Elige una categoría y se rellenará solo con el siguiente código libre de su serie.
           </p>
         }
       </div>
@@ -102,6 +105,7 @@
           placeholder="Tornillos 1/4&quot;, acero inoxidable"
           class="sw-input"
           [formField]="campos.nombre"
+          (change)="sugerirCodigo()"
           [attr.aria-invalid]="invalid(campos.nombre)"
           [attr.aria-describedby]="errorDe(campos.nombre) ? 'nombre-error' : null"
         />

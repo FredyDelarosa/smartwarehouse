@@ -114,7 +114,17 @@ export class ProductoFormComponent {
   protected readonly codigos = inject(CodigoProductoService);
 
   /** ¿El código lo ha rellenado la app (y por tanto se puede pisar)? */
-  protected readonly codigoSugerido = signal(false);
+  /**
+   * El usuario ha escrito el código a mano.
+   *
+   * Antes esto era un flag `codigoSugerido` que hacía lo contrario: se
+   * activaba cuando el sistema proponía un código, y cualquier tecleo lo
+   * apagaba. Con el formato nuevo el código depende también de la inicial del
+   * nombre, así que la pregunta correcta es "¿lo escribió él?".
+   */
+  protected readonly codigoEditado = signal(false);
+  /** Categoría + inicial para las que ya se propuso un código. */
+  private readonly claveSugerida = signal<string | null>(null);
 
   /** Route param `:id` (solo en la ruta de edición). */
   readonly id = input<string>();
@@ -137,36 +147,47 @@ export class ProductoFormComponent {
     return this.categorias.items().find((c) => c.id === id)?.nombre ?? null;
   });
 
-  /** Explicación de la convención para la categoría elegida. */
+  /**
+   * Explicación de la convención para lo que hay elegido ahora mismo.
+   *
+   * La leyenda tiene que cambiar con la categoría, con el nombre, y decir la
+   * verdad cuando la categoría no tiene prefijo asignado. Antes depended solo
+   * de la categoría, y cuatro de las ocho se quedaban sin leyenda.
+   */
   protected readonly pistaCodigo = computed(() =>
-    this.esEdicion() ? null : this.codigos.pistaDe(this.nombreCategoriaElegida()),
+    this.esEdicion()
+      ? null
+      : this.codigos.pistaDe(this.nombreCategoriaElegida(), this.model().nombre),
   );
 
   /**
-   * Rellena el código con el siguiente libre de la serie de la categoría.
+   * Rellena el código con el siguiente libre de la serie.
    *
-   * Solo al **elegir** categoría, no mientras se escribe: si se regenerara en
-   * cada cambio se pisaría el código que la persona esté tecleando.
+   * El código depende de la categoría **y** de la inicial del nombre, así que
+   * hay que recalcularlo en los dos casos. Solo se recalcula cuando cambia la
+   * INICIAL, no en cada tecla: con nombre "Tornillo" la inicial ya es T desde
+   * el primer carácter, y seguir recalculando solo haría parpadear el campo
+   * mientras la persona escribe.
    *
-   * Si el campo ya tiene algo escrito (porque es una edición o porque el
-   * usuario empezó a teclear), no se toca.
+   * Si el usuario escribió el código a mano, no se vuelve a tocar nunca.
    */
   protected sugerirCodigo(): void {
     if (this.esEdicion()) return;
-    if (this.codigoSugerido()) return; // ya se propuso uno para esta categoría
-    if (this.model().codigo.trim()) return; // no pisar lo que se está escribiendo
+    if (this.codigoEditado()) return; // manda lo que escribió la persona
 
-    const propuesta = this.codigos.siguiente(this.nombreCategoriaElegida());
-    if (!propuesta) return;
+    const inicial = this.codigos.inicialDe(this.model().nombre);
+    const clave = `${this.nombreCategoriaElegida() ?? ''}|${inicial ?? ''}`;
+    if (clave === this.claveSugerida()) return; // nada que recalcular
+    this.claveSugerida.set(clave);
 
-    this.model.update((m) => ({ ...m, codigo: propuesta }));
-    this.codigoSugerido.set(true);
+    const propuesta = this.codigos.siguiente(this.nombreCategoriaElegida(), this.model().nombre);
+    this.model.update((m) => ({ ...m, codigo: propuesta ?? '' }));
   }
 
-  /** Si el usuario edita a mano el código, deja de propuesta automática. */
+  /** Si el usuario edita a mano el código, se respeta y no se vuelve a tocar. */
   protected onCodigoManual(event: Event): void {
     const valor = (event.target as HTMLInputElement).value;
-    this.codigoSugerido.set(false);
+    this.codigoEditado.set(valor.trim().length > 0);
     if (valor.trim()) this.codigos.reservar(valor);
   }
 

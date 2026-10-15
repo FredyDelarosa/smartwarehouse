@@ -7,20 +7,34 @@ import { ApiService } from './api.service';
  *
  * ## La convención
  *
- * Los 50 productos sembrados siguen un patrón claro: **prefijo corto por
- * categoría + número correlativo**. El prefijo describe el tipo de producto, no
- * la familia:
+ * **`prefijo de categoría` + `inicial del nombre` + `número`**
  *
- * | Categoría | Prefijo | Dígitos | Ejemplos          |
- * |-----------|---------|---------|-------------------|
- * | Tornillería          | `T`  | 3 | T001, T002, T010 |
- * | Herramientas manuales | `HM` | 2 | HM01, HM06 |
- * | Herramientas eléctricas | `HE` | 2 | HE01, HE05 |
- * | EPP                 | `G`  | 3 | G005, G006       |
- * | Insumos generales   | `I`  | 3 | I001, I005       |
- * | Eléctrico           | `E`  | 3 | E001, E004       |
- * | Plomería            | `P`  | 3 | P001, P005       |
- * | Pintura             | `N`  | 3 | N001, N007       |
+ * | Categoría | Prefijo | Ejemplo            |
+ * |---|---|---|
+ * | Tornillería | `T` | Tornillo → `TT001`, Tuerca → `TU002` |
+ * | Herramientas manuales | `HM` | Alicate → `HMA001` |
+ * | Herramientas eléctricas | `HE` | Taladro → `HET001` |
+ * | EPP | `G` | Guante → `GG001`, Casco → `GC001` |
+ * | Insumos generales | `I` | Cinta → `IC001` |
+ * | Eléctrico | `E` | Enchufe → `EE001` |
+ * | Plomería | `P` | Tubería → `PT001` |
+ * | Pintura | `N` | Nanotinte → `NN001` |
+ *
+ * ### Por qué el número NO es aleatorio
+ *
+ * Se busca el **siguiente libre**, no uno al azar. El servicio ya sabe qué
+ * códigos existen, así que un número aleatorio no aportaría nada y además
+ * obligaría a reintentar cuando saliera uno ocupado. Y un código aleatorio es
+ * ilegible de viva voz: en una nave, «busca el TT014» se dice en un segundo;
+ * «busca el 4713» obliga a repetirlo y a verificarlo letra a letra.
+ *
+ * ### La serie se lleva por categoría + inicial, no solo por categoría
+ *
+ * Con un contador único por categoría, Tornillería daría TT001, TU002, TA003…
+ * y a la altura del producto 100 estarías buscando TT101 con un código que no
+ * contiene la T. Agrupando por inicial, todos los TA* son arandelas y todos
+ * los TT* son tornillos, y el código dice algo de lo que hay dentro del
+ * estante.
  *
  * ## Por qué la tabla está indexada por nombre y no por id
  *
@@ -29,30 +43,95 @@ import { ApiService } from './api.service';
  * deja de ser "herramientas eléctricas". El nombre es la clave estable, y el
  * prefijo es una decisión editorial, no un dato técnico.
  *
- * ## Si el backend crea una categoría nueva
+ * ## ⚠️ Las claves van SIN TILDE, a propósito
  *
- * `prefijoDe()` devuelve `null` y la UI **no rellena nada**: es preferible que
- * el usuario escriba el código a mano a que se le invente uno que rompa la
- * convención sin avisar. Ver DECISIONS.md §3.12.
+ * La búsqueda normaliza el nombre de la categoría quitando tildes
+ * (`Eléctrico` → `electrico`). Si estas claves las llevaran, `electrico` no
+ * encontraría `eléctrico` y la categoría se quedaría sin prefijo: sin
+ * sugerencia y **sin la leyenda que explica que el código se genera solo**.
+ * Cuatro de las ocho categorías fallaban por eso. Si añades una categoría,
+ * escribe la clave normalizada.
  */
+/**
+ * Categoría normalizada → prefijo y número de dígitos.
+ *
+ * ⚠️ Las claves van SIN TILDE. La búsqueda normaliza el nombre de la
+ * categoría quitando tildes (`Eléctrico` → `electrico`); si estas claves las
+ * llevaran, la categoría se quedaría sin prefijo y su producto **sin la
+ * leyenda que explica que el código se genera solo**. Cuatro de las ocho
+ * categorías fallaban por eso. Si añades una, escribe la clave normalizada.
+ */
+export const CONVENCION_PRODUCTO: Record<string, { prefijo: string; digitos: number }> = {
+  tornilleria: { prefijo: 'T', digitos: 3 },
+  'herramientas manuales': { prefijo: 'HM', digitos: 2 },
+  'herramientas electricas': { prefijo: 'HE', digitos: 2 },
+  epp: { prefijo: 'G', digitos: 3 },
+  'insumos generales': { prefijo: 'I', digitos: 3 },
+  electrico: { prefijo: 'E', digitos: 3 },
+  plomeria: { prefijo: 'P', digitos: 3 },
+  pintura: { prefijo: 'N', digitos: 3 },
+};
+
+/** Quita tildes y mayúsculas, para comparar nombres de categoría. */
+export function normalizarCategoria(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Prefijo y formato de una categoría, o `null` si no hay convención. */
+export function formatoCategoria(
+  nombreCategoria: string | null | undefined,
+): { prefijo: string; digitos: number } | null {
+  if (!nombreCategoria) return null;
+  return CONVENCION_PRODUCTO[normalizarCategoria(nombreCategoria)] ?? null;
+}
+
+/** Primera letra del nombre en mayúscula. `null` si no hay letra válida. */
+export function inicialProducto(nombre: string | null | undefined): string | null {
+  if (!nombre) return null;
+  const primera = nombre.trim().charAt(0).toUpperCase();
+  return /^[A-ZÑ]$/.test(primera) ? primera : null;
+}
+
+/**
+ * Propuesta de código: `prefijo` + `inicial del nombre` + siguiente número
+ * libre de esa serie.
+ *
+ * Devuelve `null` —y entonces el campo se deja vacío para que lo escriba
+ * quien da de alta— si la categoría no tiene prefijo, si el nombre está vacío
+ * o no empieza por letra, o si la serie está llena.
+ *
+ * El número empieza en 1, no en `10 ** (digitos - 1)`: eso último es el valor
+ * más ALTO representable, no el más bajo, y hacía que una serie de 3 dígitos
+ * propusiera TT100 con T001…T010 ya usados.
+ */
+export function proponerCodigo(
+  nombreCategoria: string | null | undefined,
+  nombreProducto: string | null | undefined,
+  usados: ReadonlySet<string>,
+): string | null {
+  const formato = formatoCategoria(nombreCategoria);
+  if (!formato) return null;
+  const inicial = inicialProducto(nombreProducto);
+  if (!inicial) return null;
+
+  const serie = `${formato.prefijo}${inicial}`;
+  const usadosMayus = new Set([...usados].map((c) => c.toUpperCase()));
+
+  for (let n = 1; n < 10 ** formato.digitos; n++) {
+    const candidato = `${serie}${String(n).padStart(formato.digitos, '0')}`;
+    if (!usadosMayus.has(candidato)) return candidato;
+  }
+  return null;
+}
+
+
 @Service()
 export class CodigoProductoService {
   private readonly api = inject(ApiService);
-
-  /** Categoría → prefijo y número de dígitos. */
-  private static readonly CONVENCION: Record<string, { prefijo: string; digitos: number }> = {
-    tornillería: { prefijo: 'T', digitos: 3 },
-    'herramientas manuales': { prefijo: 'HM', digitos: 2 },
-    'herramientas eléctricas': { prefijo: 'HE', digitos: 2 },
-    epp: { prefijo: 'G', digitos: 3 },
-    'insumos generales': { prefijo: 'I', digitos: 3 },
-    eléctrico: { prefijo: 'E', digitos: 3 },
-    plomería: { prefijo: 'P', digitos: 3 },
-    pintura: { prefijo: 'N', digitos: 3 },
-  };
-
-  /** Prefijo por defecto cuando la categoría no está en la tabla. */
-  private static readonly PREFIJO_GENERICO = { prefijo: '', digitos: 3 };
 
   /** Códigos ya usados, para no proponer uno que exista. */
   private readonly _codigosUsados = signal<Set<string>>(new Set());
@@ -61,17 +140,15 @@ export class CodigoProductoService {
   /**
    * Carga todos los códigos existentes una sola vez.
    *
-   * Se piden solo los productos activos: los dados de baja conservan su código
-   * y la unicidad sigue aplicando, así que un código retirado podría
-   * proponerse de nuevo. Por eso se piden también los inactivos cuando el
-   * backend lo permita; si no, es una sugerencia y el servidor valida.
+   * Se piden también los inactivos: un producto dado de baja conserva su
+   * código y la unicidad sigue aplicando, así que la serie no debe saltárselo
+   * por no verlo en el listado.
    */
   cargar(): void {
     if (this._cargados()) return;
     this._cargados.set(true);
 
-    // El listado trae paginación; se piden páginas amplias porque el
-    // objetivo es solo recoger identificadores, no pintar filas.
+    // Páginas amplias: el objetivo es recoger identificadores, no pintar filas.
     this.api
       .get<{ codigo: string }[]>('/productos/', { skip: 0, limit: 500, activo: false })
       .subscribe({
@@ -94,52 +171,57 @@ export class CodigoProductoService {
 
   /** Prefijo y formato de una categoría, o `null` si no hay convención. */
   formatoDe(nombreCategoria: string | null | undefined): { prefijo: string; digitos: number } | null {
-    if (!nombreCategoria) return null;
-    const clave = this.normalizar(nombreCategoria);
-    return CodigoProductoService.CONVENCION[clave] ?? null;
+    return formatoCategoria(nombreCategoria);
   }
 
   /**
-   * Propone el siguiente código libre para una categoría.
+   * Propuesta de código para un producto, o `null`.
    *
-   * `Tornillería` → `T011` si ya hay T001…T010. Devuelve `null` si la
-   * categoría no tiene prefijo asignado o si el backend no ha cargado los
-   * códigos: entonces el campo se queda vacío para que lo escriba la persona.
+   * `null` cuando la categoría no tiene prefijo, cuando el nombre está vacío
+   * o no empieza por letra, o cuando el backend aún no ha cargado los
+   * códigos. Prefiere un `null` honesto a inventar un código que rompa la
+   * convención sin avisar.
    */
-  siguiente(nombreCategoria: string | null | undefined): string | null {
-    const formato = this.formatoDe(nombreCategoria);
-    if (!formato) return null;
+  siguiente(
+    nombreCategoria: string | null | undefined,
+    nombreProducto?: string | null,
+  ): string | null {
+    // Sin la lista de códigos no se puede saber si el propuesto está libre.
     if (this._codigosUsados().size === 0) return null;
+    return proponerCodigo(nombreCategoria, nombreProducto, this._codigosUsados());
+  }
 
-    const usados = this._codigosUsados();
-    const max = formato.digitos;
-    const min = 10 ** (max - 1);
+  /** Primera letra del nombre, en mayúscula. `null` si no hay letra válida. */
+  inicialDe(nombre: string | null | undefined): string | null {
+    return inicialProducto(nombre);
+  }
 
-    let n = min;
-    // Se empieza por el mínimo de la serie y se avanza hasta encontrar hueco.
-    // 900 tope defensivo: evita un bucle infinito si algún día la serie
-    // estuviera llena hasta el final.
-    while (n < 10 ** max && n < 900) {
-      const candidato = `${formato.prefijo}${String(n).padStart(max, '0')}`;
-      if (!usados.has(candidato)) return candidato;
-      n++;
+  /**
+   * Texto de ayuda para la UI.
+   *
+   * Hay tres casos distintos y el formulario los muestra todos: con la
+   * categoría elegida, sin categoría, y con una categoría que **no tiene
+   * prefijo asignado**. Confundir el segundo con el tercero hacía que la UI
+   * prometiese una generación automática que no iba a ocurrir.
+   */
+  pistaDe(
+    nombreCategoria: string | null | undefined,
+    nombreProducto?: string | null,
+  ): string | null {
+    if (!nombreCategoria) {
+      return 'Elige una categoría y escribe el nombre: el código se generará con el prefijo de la categoría y la inicial del nombre.';
     }
-    return null;
-  }
 
-  /** Explicación para la UI: "HM + 2 dígitos → HM07". */
-  pistaDe(nombreCategoria: string | null | undefined): string | null {
-    const formato = this.formatoDe(nombreCategoria);
-    if (!formato) return null;
-    const ejemplo = `${formato.prefijo}${String(1).padStart(formato.digitos, '0')}`;
-    return `Se generará automáticamente siguiendo la convención (${formato.prefijo} + ${formato.digitos} dígitos, como ${ejemplo}). Puedes cambiarlo.`;
-  }
+    const formato = formatoCategoria(nombreCategoria);
+    if (!formato) {
+      return `«${nombreCategoria}» no tiene prefijo asignado en la convención, así que el código no se generará solo. Escríbelo a mano.`;
+    }
 
-  private normalizar(s: string): string {
-    return s
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+    const digitos = '0'.repeat(formato.digitos);
+    const inicial = inicialProducto(nombreProducto);
+    if (!inicial) {
+      return `Se generará automáticamente: ${formato.prefijo} (categoría) + inicial del nombre + ${formato.digitos} dígitos. Escribe el nombre para verlo.`;
+    }
+    return `Código automático: ${formato.prefijo} (categoría) + ${inicial} (inicial de tu nombre) + ${formato.digitos} dígitos → ${formato.prefijo}${inicial}${digitos}. Puedes cambiarlo.`;
   }
 }

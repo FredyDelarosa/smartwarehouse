@@ -37,3 +37,38 @@ export type AlertaStock = {
   /** stock_minimo - stock_total. Siempre positivo en una alerta. */
   faltante: number;
 };
+/**
+ * Carga inicial: varias existencias en una llamada (POST /inventario/carga-inicial).
+ *
+ * Devuelve 201 aunque alguna línea falle, y el detalle va línea a línea: es
+ * normal que un producto esté dado de baja y eso no debe impedir cargar los
+ * otros doscientos.
+ */
+export type LineaCargaInicial = {
+  producto_id: number;
+  ubicacion_id: number;
+  cantidad: number;
+};
+
+export type CargaInicialRequest = {
+  lineas: LineaCargaInicial[];
+  referencia?: string | null;
+  observaciones?: string | null;
+};
+
+export type LineaCargaResultado = {
+  indice: number;
+  producto_id: number;
+  ubicacion_id: number;
+  cantidad: number;
+  movimiento_id: number | null;
+  ok: boolean;
+  error: string | null;
+};
+
+export type CargaInicialResultado = {
+  total_lineas: number;
+  registradas: number;
+  fallidas: number;
+  movimientos: LineaCargaResultado[];
+};

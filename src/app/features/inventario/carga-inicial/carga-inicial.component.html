@@ -1,0 +1,246 @@
+<!--
+  Carga inicial del stock.
+
+  El formulario son filas de producto + estante + cantidad. Se pueden añadir más
+  filas, pero el objetivo no es escribirlas una a una: para un almacén
+  entero son cientos, y por eso existen "Repetir producto" y el envío en una
+  sola llamada.
+-->
+<div class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+  <header class="mb-6">
+    <h1 class="text-2xl font-semibold tracking-tight text-foreground">Carga inicial</h1>
+    <p class="mt-1.5 max-w-3xl text-sm text-muted-foreground">
+      Coloca existencias en varios estantes de una sentada. Cada línea genera
+      un movimiento de entrada con tu usuario y la fecha de ahora, así que el
+      stock queda trazado igual que cualquier otra entrada.
+    </p>
+  </header>
+
+  @if (errorServidor(); as mensaje) {
+    <div
+      role="alert"
+      class="mb-5 flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+    >
+      <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+      <span>{{ mensaje }}</span>
+    </div>
+  }
+
+  <!-- ══════════════════ RESULTADO ══════════════════ -->
+  @if (resultado(); as r) {
+    <div class="space-y-5">
+      <div
+        class="rounded-lg border p-4"
+        [class.border-success]="r.fallidas === 0"
+        [class.bg-success-surface]="r.fallidas === 0"
+        [class.border-warning]="r.fallidas > 0"
+        [class.bg-warning-surface]="r.fallidas > 0"
+      >
+        <p
+          class="flex items-center gap-2 text-sm font-medium"
+          [class.text-success]="r.fallidas === 0"
+          [class.text-warning]="r.fallidas > 0"
+        >
+          <sw-icon [name]="r.fallidas === 0 ? 'check' : 'alerta'" [size]="17" />
+          @if (r.fallidas === 0) {
+            {{ r.registradas }} líneas cargadas correctamente.
+          } @else {
+            {{ r.registradas }} cargadas y {{ r.fallidas }} con errores.
+          }
+        </p>
+      </div>
+
+      <div class="sw-card overflow-hidden">
+        <table class="w-full text-sm">
+          <caption class="sr-only">Resultado línea a línea de la carga inicial</caption>
+          <thead>
+            <tr class="border-b border-border bg-surface-sunken text-left text-xs text-muted-foreground">
+              <th scope="col" class="px-4 py-2.5 font-medium">#</th>
+              <th scope="col" class="px-4 py-2.5 font-medium">Producto</th>
+              <th scope="col" class="px-4 py-2.5 font-medium">Ubicación</th>
+              <th scope="col" class="px-4 py-2.5 text-right font-medium">Cantidad</th>
+              <th scope="col" class="px-4 py-2.5 font-medium">Resultado</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of r.movimientos; track m.indice) {
+              <tr class="border-b border-border last:border-0">
+                <td class="px-4 py-2.5 tabular-nums text-subtle-foreground">{{ m.indice + 1 }}</td>
+                <td class="px-4 py-2.5">
+                  <span class="font-mono text-xs text-muted-foreground">{{ codigoProducto(m.producto_id) }}</span>
+                  <span class="ml-2 text-foreground">{{ nombreProducto(m.producto_id) }}</span>
+                </td>
+                <td class="px-4 py-2.5 font-mono text-xs text-foreground">
+                  {{ codigoUbicacion(m.ubicacion_id) }}
+                </td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-foreground">{{ m.cantidad }}</td>
+                <td class="px-4 py-2.5">
+                  @if (m.ok) {
+                    <span class="inline-flex items-center gap-1 text-xs text-success">
+                      <sw-icon name="check" [size]="13" />
+                      Cargada
+                    </span>
+                  } @else {
+                    <span class="inline-flex items-start gap-1 text-xs text-danger">
+                      <sw-icon name="alerta" [size]="13" class="mt-px shrink-0" />
+                      {{ m.error }}
+                    </span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-wrap gap-3">
+        <sw-btn type="button" label="Otra carga" icon="mas" variant="secondary" (click)="otraCarga()" />
+        <sw-btn type="button" label="Ver inventario" icon="inventario" (click)="verInventario()" />
+      </div>
+    </div>
+  } @else {
+    <!-- ══════════════════ FORMULARIO ══════════════════ -->
+    <div class="space-y-5">
+      <div class="sw-card overflow-hidden">
+        <table class="w-full text-sm">
+          <caption class="sr-only">Líneas de la carga inicial</caption>
+          <thead>
+            <tr class="border-b border-border bg-surface-sunken text-left text-xs text-muted-foreground">
+              <th scope="col" class="px-4 py-2.5 font-medium">Producto</th>
+              <th scope="col" class="px-4 py-2.5 font-medium">Ubicación</th>
+              <th scope="col" class="px-4 py-2.5 text-right font-medium">Cantidad</th>
+              <th scope="col" class="px-4 py-2.5"><span class="sr-only-focusable">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lineas(); track l.id) {
+              <tr
+                class="border-b border-border last:border-0"
+                [class.bg-danger-surface]="duplicadas().has(l.id)"
+              >
+                <td class="px-4 py-2.5">
+                  <sw-producto-picker
+                    label="Producto"
+                    placeholder="Código o nombre"
+                    [value]="l.producto_id || null"
+                    (valueChange)="actualizar(l.id, { producto_id: $event ?? 0 })"
+                  />
+                  @if (duplicadas().has(l.id)) {
+                    <p class="mt-1 flex items-center gap-1 text-xs text-danger">
+                      <sw-icon name="alerta" [size]="12" />
+                      Ya hay otra línea con este producto en esta misma ubicación.
+                    </p>
+                  }
+                </td>
+                <td class="px-4 py-2.5">
+                  <sw-ubicacion-picker
+                    label="Ubicación"
+                    [soloActivas]="true"
+                    [value]="l.ubicacion_id || null"
+                    (valueChange)="actualizar(l.id, { ubicacion_id: $event ?? 0 })"
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  <input
+                    type="number"
+                    inputmode="numeric"
+                    min="0"
+                    aria-label="Cantidad"
+                    class="sw-input w-24 text-right"
+                    [value]="l.cantidad || ''"
+                    (input)="actualizar(l.id, { cantidad: +$any($event.target).value || 0 })"
+                  />
+                </td>
+                <td class="px-4 py-2.5">
+                  <div class="flex items-center justify-end gap-1">
+                    @if (l.producto_id > 0) {
+                      <button
+                        type="button"
+                        (click)="repetirProducto(l)"
+                        class="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground"
+                        [attr.aria-label]="'Añadir dos líneas más con ' + nombreProducto(l.producto_id)"
+                        title="Añadir dos líneas más con este producto"
+                      >
+                        <sw-icon name="mas" [size]="15" />
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      (click)="quitar(l.id)"
+                      [disabled]="lineas().length === 1"
+                      class="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-danger-surface hover:text-danger disabled:opacity-40 disabled:hover:bg-transparent"
+                      [attr.aria-label]="'Quitar la línea de ' + (l.producto_id ? nombreProducto(l.producto_id) : 'producto sin elegir')"
+                      title="Quitar esta línea"
+                    >
+                      <sw-icon name="borrar" [size]="15" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <sw-btn type="button" label="Añadir línea" icon="mas" variant="secondary" (click)="anadir()" />
+
+        <p class="text-xs text-muted-foreground">
+          @if (validas().length === 0) {
+            Elige producto, ubicación y cantidad en al menos una línea.
+          } @else {
+            {{ validas().length }} línea{{ validas().length === 1 ? '' : 's' }} ·
+            {{ totalUnidades() }} unidades en total
+          }
+        </p>
+      </div>
+
+      <div class="sw-card space-y-4 p-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label for="carga-referencia" class="mb-1.5 block text-sm font-medium text-foreground">
+              Referencia <span class="font-normal text-muted-foreground">(opcional)</span>
+            </label>
+            <input
+              id="carga-referencia"
+              type="text"
+              class="sw-input"
+              placeholder="CARGA-JULIO"
+              [value]="referencia()"
+              (input)="referencia.set($any($event.target).value)"
+            />
+            <p class="mt-1 text-xs text-muted-foreground">
+              Aparece en cada movimiento generado. Si la dejas vacía se usa
+              <code class="sw-code">CARGA-INICIAL</code>.
+            </p>
+          </div>
+
+          <div>
+            <label for="carga-observaciones" class="mb-1.5 block text-sm font-medium text-foreground">
+              Observaciones <span class="font-normal text-muted-foreground">(opcional)</span>
+            </label>
+            <input
+              id="carga-observaciones"
+              type="text"
+              class="sw-input"
+              placeholder="Albarán de entrega"
+              [value]="observaciones()"
+              (input)="observaciones.set($any($event.target).value)"
+            />
+          </div>
+        </div>
+
+        <sw-btn
+          type="button"
+          [label]="cargando() ? 'Cargando…' : 'Cargar ' + validas().length + ' línea' + (validas().length === 1 ? '' : 's')"
+          icon="check"
+          [loading]="cargando()"
+          [disabled]="!enviable()"
+          [fullWidth]="true"
+          size="lg"
+          (click)="enviar()"
+        />
+      </div>
+    </div>
+  }
+</div>

@@ -1,14 +1,19 @@
 import { inject, Service } from '@angular/core';
-import { Observable, catchError, forkJoin, map, of } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
 
 import { ApiService } from '../../core/services/api.service';
-import type { AlertaStock, StockProducto } from '../../core/models/inventario.model';
+import type {
+  AlertaStock,
+  CargaInicialRequest,
+  CargaInicialResultado,
+  StockProducto,
+} from '../../core/models/inventario.model';
 
 /**
  * Endpoints de `/inventario`.
  *
- * `/inventario` es de solo lectura: el stock cambia por movimientos
- * (POST /movimientos/…), nunca editando el inventario a mano.
+ * El stock cambia por movimientos (POST /movimientos/…) o por carga inicial
+ * (POST /inventario/carga-inicial), nunca editando el inventario a mano.
  */
 @Service()
 export class InventarioService {
@@ -64,6 +69,17 @@ export class InventarioService {
         return this.mapaDe(unicos);
       }),
     );
+  }
+
+  /**
+   * POST /inventario/carga-inicial — coloca existencias en varias ubicaciones.
+   *
+   * Invalida la cache porque el stock de los productos tocados ha cambiado.
+   */
+  cargaInicial(payload: CargaInicialRequest): Observable<CargaInicialResultado> {
+    return this.api
+      .post<CargaInicialResultado>('/inventario/carga-inicial', payload)
+      .pipe(tap(() => this.limpiarCache()));
   }
 
   /** Invalida la cache (tras un movimiento, una baja o una edición). */

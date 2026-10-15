@@ -53,6 +53,11 @@ export class MainLayoutComponent {
         { path: '/dashboard', label: 'Panel', icon: 'panel', exact: true },
         { path: '/busquedas', label: 'Buscar producto', icon: 'buscar' },
         { path: '/inventario', label: 'Inventario', icon: 'inventario' },
+        {
+          path: '/inventario/carga-inicial',
+          label: 'Carga inicial',
+          icon: 'descargar',
+        },
         { path: '/movimientos', label: 'Movimientos', icon: 'movimiento' },
         { path: '/incidencias', label: 'Incidencias', icon: 'incidencia' },
       ],
