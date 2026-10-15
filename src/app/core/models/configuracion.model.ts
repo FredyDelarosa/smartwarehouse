@@ -62,6 +62,8 @@ export type GeneracionResult = {
 };
 
 export type ResumenAlmacen = {
+  /** Nombre del almacén: va en el encabezado de la hoja impresa. */
+  nombre: string;
   total_ubicaciones: number;
   activas: number;
   fuera_servicio: number;

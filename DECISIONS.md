@@ -1556,6 +1556,107 @@ aislamiento:    almacén 1 sigue con sus 150
 permisos:       un Almacenero recibe 403 en /configuracion/generar
 ```
 
+## ✅ Listas por pasillo y por estante (sustituyen al escaneo)
+
+`/ubicaciones/listas` → «Listas por ubicación», en el listado de ubicaciones.
+
+### Por qué no cuesta nada de backend
+
+El QR nunca fue un dato: es una **clave de búsqueda** dentro de `ubicaciones`.
+Una lista por estante es la misma información agrupada de otra forma, así que
+se agrupa en memoria lo que ya devuelve `GET /inventario/ubicaciones`. Sin
+migración, sin endpoints nuevos, sin tocar el modelo de datos.
+
+Lo único que se añadió al backend fue `nombre` en
+`GET /configuracion/almacen`, porque una hoja que se imprime y se cuelga en la
+nave necesita decir de qué almacén es.
+
+### La diferencia honesta
+
+| | QR | Lista |
+|---|---|---|
+| Frescura | siempre al día | es una foto: hay que reimprimir si se mueve algo |
+| Cámara | sí, y falla | no hace falta |
+| Legibilidad | hay que apuntar y enfocar | se lee de un vistazo |
+
+La hoja lleva la fecha de impresión en el pie y el encabezado con el nombre del
+almacen. Se acepta elBruno de «foto» porque es legible sin cámara; no es un
+sustituto exacto.
+
+El QR **se conserva**: escáner y etiquetas siguen donde estaban, porque las 150
+etiquetas del almacén original ya están impresas y sirven.
+
+### Dos avisos que la pantalla da
+
+- **Estantes sin existencias**: `GET /inventario/ubicaciones` solo devuelve
+  ubicaciones con stock. Sin decirlo, una lista callaría un estante vacío y
+  parecería un olvido. Se pide también el listado completo y se indica cuántos
+  estantes hay sin nada.
+- **Paginación**: ambos endpoints rechazan `limit > 500`. Pedir 1000 daba 422;
+  pedir solo 500 en un almacén de 600 ubicaciones daría una lista incompleta
+  **sin avisar**, que es lo peor que puede pasar en un documento del que alguien
+  se fía. Se paginan todas las páginas.
+
+### Agrupación
+
+Pasillo → estante → nivel. El nivel es la clave: un estante son tres
+ubicaciones y el mismo producto puede estar repartido en varias alturas, así
+que la lista las muestra desglosadas y no sumadas a ciegas. Se ordena por
+número (`P2` antes que `P10`, nivel `2` antes que `10`), no por texto.
+
+10 tests cubren la agrupación: que los niveles no se mezclen, que un producto
+en dos alturas aparezca en las dos, y el orden numérico.
+
+---
+
+## 🐛 Fuga entre almacenes en `GET /inventario/ubicaciones`
+
+**El endpoint devolvía ubicaciones y productos de otros almacenes.**
+
+```
+Ana (almacén 1)  GET /inventario/ubicaciones  ->  64 filas
+  entre ellas, la ubicación 180001 que es del almacén 150002
+  con su producto V001 y su cantidad
+```
+
+La causa: `listar_con_productos` hacía el filtro de página sobre una
+**subconsulta** que no lo llevaba. El `WHERE almacen_id` estaba en el SELECT
+exterior, donde se lee el producto, pero no en el interior, que es el que
+recorta los ids de ubicación. Puesto ahí, `IN (...)` arrastraba filas ajenas.
+
+Lo que hacía visible la fuga: dos almacenes pueden tener legítimamente un
+`P1-A-01` cada uno (el código es único **por almacén**), así que el listado
+mostraba dos estantes con el mismo nombre y no se reconocía como un error de
+aislamiento sino como un duplicado raro.
+
+Corregido en las dos consultas. Verificado: 64 → 63, y ni la ubicación ni el
+producto del otro almacén aparecen.
+
+---
+
+## 🧪 Los tests escribían en la base: los savepoints se colaban
+
+`SesionDeTest` traduce `commit()` en `flush()` y deshace al final. Pero un caso
+de uso que envuelva cada línea en `begin_nested()` —la carga inicial— abre
+savepoints de verdad y los libera dentro de la transacción de test. El rollback
+final ya no deshace esas filas.
+
+Síntoma: T001 aparecía en **tres** ubicaciones en vez de dos, con una fila de
+stock 0 que ningún movimiento explicaba, y dos tests de inventario empezaron a
+fallar de pronto.
+
+`SesionDeTest.begin_nested()` devuelve ahora un contexto nulo. Cierra el
+agujero para cualquier caso de uso futuro que use savepoints, no solo para la
+carga inicial.
+
+### Un test que se rompía porque la aplicación se usaba
+
+`test_listar_productos_filtrados_categoria` comprobaba `len(data) == 10`. Dejó
+de pasar en cuanto alguien dio de alta un Tornillo a mano, que es justo lo que
+hace un usuario probando la aplicación. Ahora comprueba lo que le importa: que
+el filtro devuelva solo esa categoría, que incluya el producto sembrado y que
+distinga de otra categoría.
+
 ## Resumen de desviaciones
 
 | # | Decisión | Plan | Realidad | Impacto |

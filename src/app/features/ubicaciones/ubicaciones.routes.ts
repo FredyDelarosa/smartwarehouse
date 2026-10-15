@@ -17,6 +17,13 @@ export const UBICACIONES_ROUTES: Routes = [
       import('./listado/listado.component').then((m) => m.ListadoComponent),
   },
   {
+    // Va ANTES de ':id' para que "listas" no se interprete como un id.
+    path: 'listas',
+    title: 'Listas de ubicación · SmartWarehouse',
+    loadComponent: () =>
+      import('./listas/listas.component').then((m) => m.ListasComponent),
+  },
+  {
     // Va ANTES de ':id' para que "etiquetas" no se interprete como un id.
     path: 'etiquetas',
     title: 'Etiquetas QR · SmartWarehouse',

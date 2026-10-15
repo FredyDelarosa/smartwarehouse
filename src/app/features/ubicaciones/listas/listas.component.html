@@ -1,0 +1,273 @@
+<!--
+  Listas de contenido por pasillo o por estante.
+
+  Los controles llevan `print:hidden` para que al imprimir solo salga la hoja.
+  Es el mismo patrón que usa la pantalla de etiquetas.
+-->
+<div class="min-h-dvh bg-background">
+  <!-- ══════════════ Controles (no se imprimen) ══════════════ -->
+  <div class="print:hidden">
+    <header class="border-b border-border bg-surface px-4 py-5 sm:px-6">
+      <h1 class="text-xl font-semibold tracking-tight text-foreground">
+        Listas de ubicación
+      </h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        El contenido de cada pasillo o estante, listo para imprimir y colgar en
+        la nave. Sustituye al escaneo en el día a día; el QR sigue disponible.
+      </p>
+    </header>
+
+    <div class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+      @if (errorServidor(); as mensaje) {
+        <div
+          role="alert"
+          class="mb-5 flex items-start gap-2.5 rounded-lg border border-danger/40 bg-danger-surface p-3 text-sm text-danger"
+        >
+          <sw-icon name="alerta" [size]="17" class="mt-px shrink-0" />
+          <span>{{ mensaje }}</span>
+        </div>
+      }
+
+      <!-- Elegir alcance y pasillo -->
+      <div class="sw-card p-4">
+        <div class="flex flex-wrap items-end gap-5">
+          <div
+            role="group"
+            aria-label="Nivel de la lista"
+            class="inline-flex rounded-lg border border-border p-0.5"
+          >
+            <button
+              type="button"
+              (click)="cambiarAlcance('pasillo')"
+              [attr.aria-pressed]="alcance() === 'pasillo'"
+              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              [class.bg-primary]="alcance() === 'pasillo'"
+              [class.text-on-primary]="alcance() === 'pasillo'"
+              [class.text-muted-foreground]="alcance() !== 'pasillo'"
+            >
+              Por pasillo
+            </button>
+            <button
+              type="button"
+              (click)="cambiarAlcance('estante')"
+              [attr.aria-pressed]="alcance() === 'estante'"
+              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              [class.bg-primary]="alcance() === 'estante'"
+              [class.text-on-primary]="alcance() === 'estante'"
+              [class.text-muted-foreground]="alcance() !== 'estante'"
+            >
+              Por estante
+            </button>
+          </div>
+
+          @if (cargando()) {
+            <p class="flex items-center gap-2 text-sm text-muted-foreground">
+              <sw-icon name="cargando" [size]="16" class="animate-spin" />
+              Cargando el almacén…
+            </p>
+          }
+        </div>
+
+        @if (!cargando() && pasillos().length > 0) {
+          <div class="mt-4">
+            <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Pasillo
+            </p>
+            <div class="flex flex-wrap gap-2">
+              @for (p of pasillos(); track p.pasillo) {
+                <button
+                  type="button"
+                  (click)="elegirPasillo(p.pasillo)"
+                  [attr.aria-pressed]="pasilloElegido() === p.pasillo"
+                  class="flex items-baseline gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
+                  [class.border-primary]="pasilloElegido() === p.pasillo"
+                  [class.bg-primary]="pasilloElegido() === p.pasillo"
+                  [class.text-on-primary]="pasilloElegido() === p.pasillo"
+                  [class.border-border]="pasilloElegido() !== p.pasillo"
+                  [class.bg-surface]="pasilloElegido() !== p.pasillo"
+                  [class.text-foreground]="pasilloElegido() !== p.pasillo"
+                >
+                  {{ p.pasillo }}
+                  <span class="text-xs opacity-75">{{ p.totalUnidades }} uds</span>
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (alcance() === 'estante' && estantesDelPasillo().length > 0) {
+          <div class="mt-4">
+            <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Estante
+            </p>
+            <div class="flex flex-wrap gap-2">
+              @for (e of estantesDelPasillo(); track e.estante) {
+                <button
+                  type="button"
+                  (click)="elegirEstante(e.estante)"
+                  [attr.aria-pressed]="estanteElegido() === e.estante"
+                  class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
+                  [class.border-primary]="estanteElegido() === e.estante"
+                  [class.bg-primary]="estanteElegido() === e.estante"
+                  [class.text-on-primary]="estanteElegido() === e.estante"
+                  [class.border-border]="estanteElegido() !== e.estante"
+                  [class.bg-surface]="estanteElegido() !== e.estante"
+                  [class.text-foreground]="estanteElegido() !== e.estante"
+                >
+                  {{ e.estante }}
+                  <span class="ml-1 text-xs opacity-75">{{ e.totalUnidades }}</span>
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (estantesVacios().length > 0) {
+          <p class="mt-4 flex items-start gap-1.5 text-xs text-muted-foreground">
+            <sw-icon name="info" [size]="14" class="mt-px shrink-0" />
+            <span>
+              Este pasillo tiene {{ estantesVacios().length }} estante{{
+                estantesVacios().length === 1 ? '' : 's'
+              }}
+              sin existencias ({{ estantesVacios().join(', ') }}): no aparecen en la
+              lista porque no hay nada que listar.
+            </span>
+          </p>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ La hoja ══════════════ -->
+  <div class="mx-auto w-full max-w-4xl px-4 pb-10 print:max-w-none print:px-0 print:pb-0">
+    @if (cargando()) {
+      <p class="py-10 text-center text-sm text-muted-foreground">Preparando la lista…</p>
+    } @else if (!pasilloElegido()) {
+      <div class="sw-card p-10 text-center">
+        <span
+          class="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary"
+        >
+          <sw-icon name="inventario" [size]="20" />
+        </span>
+        <p class="text-sm font-medium text-foreground">Elige un pasillo</p>
+        <p class="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+          La hoja se compone con el contenido que hay ahora mismo. Si mueves
+          material después, habrá que reimprimir.
+        </p>
+      </div>
+    } @else if (!hayContenido()) {
+      <div class="sw-card p-10 text-center">
+        <p class="text-sm font-medium text-foreground">
+          El pasillo {{ pasilloActual()?.pasillo }} no tiene existencias
+        </p>
+        <p class="mt-1 text-xs text-muted-foreground">
+          No hay nada que listar. Puede que esté vacío, o que el stock se haya
+          dado de baja.
+        </p>
+      </div>
+    } @else {
+      <!-- Encabezado -->
+      <header class="mb-5 border-b-2 border-foreground pb-3">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 class="text-xl font-semibold tracking-tight text-foreground">
+              {{ nombreAlmacen() }}
+            </h2>
+            <p class="mt-0.5 text-sm text-muted-foreground">
+              @if (alcance() === 'pasillo') {
+                Contenido del pasillo {{ pasilloActual()?.pasillo }}
+              } @else {
+                Contenido del estante
+                {{ pasilloActual()?.pasillo }}-{{ estanteActual()?.estante }}
+              }
+            </p>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            {{ pasilloActual()?.totalUnidades }} unidades ·
+            {{ pasilloActual()?.totalProductos }} productos ·
+            {{ fecha }}
+          </p>
+        </div>
+      </header>
+
+      <!-- Por pasillo: una tabla por estante. Por estante: una tabla por nivel. -->
+      @for (estante of (alcance() === 'pasillo' ? estantesDelPasillo() : estanteActual() ? [estanteActual()!] : []); track estante.estante) {
+        <section class="mb-6 break-inside-avoid">
+          <h3 class="mb-2 text-sm font-semibold text-foreground">
+            Estante {{ pasilloActual()?.pasillo }}-{{ estante.estante }}
+            <span class="ml-2 font-normal text-xs text-muted-foreground">
+              {{ estante.totalUnidades }} uds
+            </span>
+          </h3>
+
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border-strong text-left text-xs text-muted-foreground">
+                <th scope="col" class="w-24 py-1.5 font-medium">Nivel</th>
+                <th scope="col" class="w-28 py-1.5 font-medium">Código</th>
+                <th scope="col" class="py-1.5 font-medium">Producto</th>
+                <th scope="col" class="w-24 py-1.5 text-right font-medium">Unidades</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (nivel of estante.niveles; track nivel.codigo) {
+                @for (linea of nivel.productos; track linea.producto_id + $index) {
+                  <tr class="border-b border-border last:border-0">
+                    <td class="py-1.5 align-top font-mono text-xs text-muted-foreground">
+                      {{ nivel.nivel }}
+                    </td>
+                    <td class="py-1.5 align-top font-mono text-xs text-foreground">
+                      {{ linea.codigo }}
+                    </td>
+                    <td class="py-1.5 align-top text-foreground">{{ linea.nombre }}</td>
+                    <td class="py-1.5 text-right align-top font-medium tabular-nums text-foreground">
+                      {{ linea.cantidad }}
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="4" class="py-2 text-xs text-subtle-foreground">
+                      Este nivel no tiene nada guardado.
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+
+      <footer class="mt-8 border-t border-border pt-3 text-xs text-muted-foreground">
+        <p>
+          SmartWarehouse · {{ fecha }} · La lista refleja el estado en el momento
+          de la impresión. Si se mueve material, hay que reimprimir.
+        </p>
+      </footer>
+    }
+  </div>
+
+  <!-- Barra de acción -->
+  @if (pasilloElegido() && hayContenido() && !cargando()) {
+    <div
+      class="print:hidden sticky bottom-0 border-t border-border bg-surface px-4 py-3 sm:px-6"
+    >
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <p class="text-xs text-muted-foreground">
+          La hoja sale sin estos controles.
+        </p>
+        <div class="flex gap-2">
+          @if (alcance() === 'estante') {
+            <sw-btn
+              type="button"
+              label="Volver al pasillo"
+              variant="secondary"
+              icon="flecha-izquierda"
+              (click)="cambiarAlcance('pasillo')"
+            />
+          }
+          <sw-btn type="button" label="Imprimir" icon="descargar" (click)="imprimir()" />
+        </div>
+      </div>
+    </div>
+  }
+</div>
