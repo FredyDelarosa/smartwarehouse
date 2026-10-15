@@ -105,7 +105,6 @@
           placeholder="Tornillos 1/4&quot;, acero inoxidable"
           class="sw-input"
           [formField]="campos.nombre"
-          (change)="sugerirCodigo()"
           [attr.aria-invalid]="invalid(campos.nombre)"
           [attr.aria-describedby]="errorDe(campos.nombre) ? 'nombre-error' : null"
         />
@@ -165,8 +164,7 @@
           <select
             id="categoria_id"
             [formField]="campos.categoria_id"
-            (change)="sugerirCodigo()"
-            [attr.aria-invalid]="invalid(campos.categoria_id)"
+              [attr.aria-invalid]="invalid(campos.categoria_id)"
             [attr.aria-describedby]="errorDe(campos.categoria_id) ? 'categoria-error' : 'categoria-ayuda'"
             class="sw-input"
           >

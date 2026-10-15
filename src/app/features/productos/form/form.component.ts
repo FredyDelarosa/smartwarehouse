@@ -45,7 +45,13 @@ import { ProductosService } from '../productos.service';
  */
 const UNIDADES = ['pieza', 'par', 'unidad', 'caja', 'rollo', 'litro', 'paquete'] as const;
 
-type ProductoFormModel = {
+/**
+ * Estado del formulario.
+ *
+ * Va exportado para que los tests puedan tipar las actualizaciones del signal
+ * sin tener que duplicar la forma.
+ */
+export type ProductoFormModel = {
   codigo: string;
   nombre: string;
   descripcion: string;
@@ -108,12 +114,11 @@ export class ProductoFormComponent {
   private readonly router = inject(Router);
 
   /** Catálogo de categorías. Se pide una vez y se cachea. */
-  protected readonly categorias = inject(CategoriasService);
+  readonly categorias = inject(CategoriasService);
 
   /** Convención de códigos: `T001`, `HM01`… según la categoría. */
-  protected readonly codigos = inject(CodigoProductoService);
+  readonly codigos = inject(CodigoProductoService);
 
-  /** ¿El código lo ha rellenado la app (y por tanto se puede pisar)? */
   /**
    * El usuario ha escrito el código a mano.
    *
@@ -122,9 +127,7 @@ export class ProductoFormComponent {
    * apagaba. Con el formato nuevo el código depende también de la inicial del
    * nombre, así que la pregunta correcta es "¿lo escribió él?".
    */
-  protected readonly codigoEditado = signal(false);
-  /** Categoría + inicial para las que ya se propuso un código. */
-  private readonly claveSugerida = signal<string | null>(null);
+  readonly codigoEditado = signal(false);
 
   /** Route param `:id` (solo en la ruta de edición). */
   readonly id = input<string>();
@@ -148,47 +151,71 @@ export class ProductoFormComponent {
   });
 
   /**
+   * Código que correspondería ahora mismo, o `null` si todavía no se puede.
+   *
+   * Se declara como `computed` y no como método que se llama al cambiar un
+   * campo por dos razones:
+   *
+   *  1. Depende de `codigos.usados()`, que llega por red. Antes el cálculo se
+   *     ejecutaba al elegir categoría y, si el catálogo aún no había llegado,
+   *     devolvía `null` y **se consumía igual la clave**: la propuesta no se
+   *     reintentaba nunca y el campo se quedaba vacío para siempre. De ahí el
+   *     «el código es obligatorio» sin explicación.
+   *
+   *  2. Al ser un `computed` depende de la inicial del nombre sola, así que
+   *     escribir «Tornillo» lo recalcula una vez y seguir escribiendo no lo
+   *     toca: el campo no parpadea mientras se teclea.
+   */
+  private readonly codigoPropuesto = computed<string | null>(() => {
+    if (this.esEdicion()) return null;
+    const usados = this.codigos.usados();
+    // Sin la lista no se sabe si el propuesto está libre: mejor callar que
+    // proponer un código que ya existe.
+    if (usados.size === 0) return null;
+    return this.codigos.siguiente(this.nombreCategoriaElegida(), this.model().nombre);
+  });
+
+  /**
    * Explicación de la convención para lo que hay elegido ahora mismo.
    *
    * La leyenda tiene que cambiar con la categoría, con el nombre, y decir la
-   * verdad cuando la categoría no tiene prefijo asignado. Antes depended solo
+   * verdad cuando la categoría no tiene prefijo asignado. Antes dependía solo
    * de la categoría, y cuatro de las ocho se quedaban sin leyenda.
    */
-  protected readonly pistaCodigo = computed(() =>
+  readonly pistaCodigo = computed(() =>
     this.esEdicion()
       ? null
-      : this.codigos.pistaDe(this.nombreCategoriaElegida(), this.model().nombre),
+      : this.codigos.pistaDe(
+          this.nombreCategoriaElegida(),
+          this.model().nombre,
+          // Con la lista de códigos usados la leyenda puede enseñar el código
+          // exacto, y no uno de ejemplo que podría estar ocupado.
+          this.codigos.usados(),
+        ),
   );
 
-  /**
-   * Rellena el código con el siguiente libre de la serie.
-   *
-   * El código depende de la categoría **y** de la inicial del nombre, así que
-   * hay que recalcularlo en los dos casos. Solo se recalcula cuando cambia la
-   * INICIAL, no en cada tecla: con nombre "Tornillo" la inicial ya es T desde
-   * el primer carácter, y seguir recalculando solo haría parpadear el campo
-   * mientras la persona escribe.
-   *
-   * Si el usuario escribió el código a mano, no se vuelve a tocar nunca.
-   */
-  protected sugerirCodigo(): void {
-    if (this.esEdicion()) return;
-    if (this.codigoEditado()) return; // manda lo que escribió la persona
-
-    const inicial = this.codigos.inicialDe(this.model().nombre);
-    const clave = `${this.nombreCategoriaElegida() ?? ''}|${inicial ?? ''}`;
-    if (clave === this.claveSugerida()) return; // nada que recalcular
-    this.claveSugerida.set(clave);
-
-    const propuesta = this.codigos.siguiente(this.nombreCategoriaElegida(), this.model().nombre);
-    this.model.update((m) => ({ ...m, codigo: propuesta ?? '' }));
-  }
-
   /** Si el usuario edita a mano el código, se respeta y no se vuelve a tocar. */
-  protected onCodigoManual(event: Event): void {
+  onCodigoManual(event: Event): void {
     const valor = (event.target as HTMLInputElement).value;
     this.codigoEditado.set(valor.trim().length > 0);
     if (valor.trim()) this.codigos.reservar(valor);
+  }
+
+  /**
+   * Última generación antes de validar.
+   *
+   * Los `effect` se ejecutan en la detección de cambios, que puede no haber
+   * ocurrido todavía entre el último tecleo y el clic en «Crear». Como el
+   * código es obligatorio, fallar aquí significa un error que el usuario no
+   * puede entender: el campo está vacío y no hay ninguna pista visible de
+   * por qué. Se intenta una vez más de forma síncrona y, si aun así no hay
+   * código, se deja que la validación lo diga.
+   */
+  asegurarCodigo(): void {
+    if (this.esEdicion() || this.codigoEditado()) return;
+    if (this.model().codigo.trim()) return;
+    const sugerido = this.codigoPropuesto();
+    if (sugerido) this.model.update((m) => ({ ...m, codigo: sugerido }));
   }
 
   /** Id de categoría del producto en edición, para no perderlo al guardar. */
@@ -205,7 +232,15 @@ export class ProductoFormComponent {
     return id === null ? undefined : this.api.url(`/productos/${id}`);
   });
 
-  private readonly model = signal<ProductoFormModel>({ ...MODELO_VACIO });
+  /**
+   * Estado del formulario.
+   *
+   * Va público (y no `private`) porque los tests de componente lo leen y lo
+   * escriben para reproducir la carrera entre elegir categoría y que llegue el
+   * catálogo. Es `readonly`: desde fuera solo se toca con `set`/`update`, que
+   * es justo la superficie que la plantilla usa.
+   */
+  readonly model = signal<ProductoFormModel>({ ...MODELO_VACIO });
 
   readonly form = form(this.model, (f) => {
     // En edición el código es inmutable: el campo pasa a solo lectura y el
@@ -269,6 +304,16 @@ export class ProductoFormComponent {
     this.categorias.cargar();
     // Códigos ya usados, para proponer el siguiente libre de la serie.
     this.codigos.cargar();
+
+    // Rellena el código solo mientras la persona no lo escriba a mano. Al ser
+    // un `effect` sobre un `computed`, se reintenta solo cuando la lista de
+    // códigos llega: antes la categoría elegida «quemaba» la única oportunidad
+    // de proponer y el campo se quedaba vacío para siempre.
+    effect(() => {
+      const sugerido = this.codigoPropuesto();
+      if (!sugerido || this.codigoEditado()) return;
+      this.model.update((m) => (m.codigo === sugerido ? m : { ...m, codigo: sugerido }));
+    });
 
     effect(() => {
       const producto = this.existente.value();

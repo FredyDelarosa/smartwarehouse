@@ -138,6 +138,18 @@ export class CodigoProductoService {
   private readonly _cargados = signal(false);
 
   /**
+   * Códigos ya usados, en solo lectura, para poder reaccionar a su llegada.
+   *
+   * El formulario se apoya en esto: hasta que la lista no llega no se puede
+   * proponer nada, y en cuanto llega hay que proponerse aunque la categoría se
+   * eligiera un segundo antes.
+   */
+  readonly usados = this._codigosUsados.asReadonly();
+
+  /** `true` cuando ya se intentó la carga (no cuando terminó). */
+  readonly cargado = this._cargados.asReadonly();
+
+  /**
    * Carga todos los códigos existentes una sola vez.
    *
    * Se piden también los inactivos: un producto dado de baja conserva su
@@ -206,7 +218,8 @@ export class CodigoProductoService {
    */
   pistaDe(
     nombreCategoria: string | null | undefined,
-    nombreProducto?: string | null,
+    nombreProducto?: string | null | undefined,
+    usados?: ReadonlySet<string>,
   ): string | null {
     if (!nombreCategoria) {
       return 'Elige una categoría y escribe el nombre: el código se generará con el prefijo de la categoría y la inicial del nombre.';
@@ -217,11 +230,20 @@ export class CodigoProductoService {
       return `«${nombreCategoria}» no tiene prefijo asignado en la convención, así que el código no se generará solo. Escríbelo a mano.`;
     }
 
-    const digitos = '0'.repeat(formato.digitos);
     const inicial = inicialProducto(nombreProducto);
     if (!inicial) {
       return `Se generará automáticamente: ${formato.prefijo} (categoría) + inicial del nombre + ${formato.digitos} dígitos. Escribe el nombre para verlo.`;
     }
-    return `Código automático: ${formato.prefijo} (categoría) + ${inicial} (inicial de tu nombre) + ${formato.digitos} dígitos → ${formato.prefijo}${inicial}${digitos}. Puedes cambiarlo.`;
+
+    // El ejemplo es el código REAL que va a salir, no un número inventado:
+    // se generó `TT000` como ejemplo, que no existe porque las series empiezan
+    // en 1, y una leyenda que enseña un código imposible resta confianza a la
+    // que enseña la serie entera.
+    const serie = `${formato.prefijo}${inicial}`;
+    const ejemplo = usados
+      ? (proponerCodigo(nombreCategoria, nombreProducto, usados) ?? `${serie}${String(1).padStart(formato.digitos, '0')}`)
+      : `${serie}${String(1).padStart(formato.digitos, '0')}`;
+
+    return `Código automático: ${formato.prefijo} (categoría) + ${inicial} (inicial de tu nombre) + ${formato.digitos} dígitos → ${ejemplo}. Puedes cambiarlo.`;
   }
 }
